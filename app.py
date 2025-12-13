@@ -322,7 +322,11 @@ if st.sidebar.button("Run Analysis", type="primary"):
             
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Normalized Score", f"{normalized_score:+.2f} / ±5")
+                st.metric("Normalized Score", f"{normalized_score:+.2f}", help="Scale: -5 (Strong Sell) to +5 (Strong Buy)")
+                # Add visual score bar
+                score_percentage = ((normalized_score + 5) / 10) * 100
+                st.progress(score_percentage / 100)
+                st.caption("Scale: -5 (Sell) ← 0 (Neutral) → +5 (Buy)")
             with col2:
                 st.markdown(f"**{recommendation}**")
             
