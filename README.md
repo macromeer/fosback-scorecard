@@ -2,7 +2,7 @@
 
 **Should you buy, hold, or sell that stock?** Get a simple answer based on 7 key factors that professional investors use.
 
-[**🚀 Try the Live App**](https://macromeer-fosback-scorecard.streamlit.app)
+[**🚀 Try the Live App**](https://fosback-scorecard.streamlit.app)
 
 ---
 
@@ -25,7 +25,7 @@ This tool analyzes **any stock or ETF** and gives you a clear score from **-5 (S
 
 ## How to Use It
 
-1. **Go to the app**: [macromeer-fosback-scorecard.streamlit.app](https://macromeer-fosback-scorecard.streamlit.app)
+1. **Go to the app**: [fosback-scorecard.streamlit.app](https://fosback-scorecard.streamlit.app)
 2. **Enter a ticker** (like AAPL, TSLA, SPY, or any stock/ETF)
 3. **Click "Run Analysis"**
 4. **Get your score** and recommendation
