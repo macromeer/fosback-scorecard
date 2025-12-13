@@ -114,6 +114,26 @@ if st.sidebar.button("Run Analysis", type="primary"):
             
             # Volume metrics
             vol_5d = df['volume'].tail(5).mean()
+            vol_50d = df['volume'].tail(50).mean()
+            
+            # Display current metrics
+            st.header(f"{ticker} - Current Metrics")
+            st.caption(f"As of {df['date'].iloc[current_idx].strftime('%Y-%m-%d')}")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Price", f"${current_price:.2f}")
+                st.metric("MA50", f"${ma50:.2f}", f"{((current_price-ma50)/ma50*100):+.2f}%")
+            with col2:
+                st.metric("MA200", f"${ma200:.2f}", f"{((current_price-ma200)/ma200*100):+.2f}%")
+                st.metric("20d ROC", f"{roc_20:+.2f}%")
+            with col3:
+                st.metric("Volatility (20d)", f"{current_volatility:.2f}%")
+                st.metric("Vol Z-Score", f"{vol_z_score:.2f}")
+            with col4:
+                st.metric("Win Rate", f"{win_rate:.1f}%")
+                st.metric("52w Position", f"{price_position:.1f}%")
+            
             # BLOCK 1: Trend & Momentum
             st.subheader("📈 Block 1: Trend & Momentum")
             with st.expander("ℹ️ What does this measure?"):
@@ -163,17 +183,8 @@ if st.sidebar.button("Run Analysis", type="primary"):
                 st.info(f"~ **Moderate Consistency** - {win_rate:.1f}% positive days")
             
             block1_score = trend_score + momentum_score + consistency_score
-            st.metric("Block 1 Score", f"{block1_score}/3"))
-            elif roc_20 < -5 or momentum_change < -2:
-                momentum_score = -1
-                st.error("✗ Negative momentum")
-            else:
-                momentum_score = 0
-                st.info("~ Neutral momentum")
+            st.metric("Block 1 Score", f"{block1_score}/3")
             
-            # Win rate
-            if win_rate > 60:
-                consistency_score = 1
             # BLOCK 2: Breadth & Quality
             st.subheader("📊 Block 2: Breadth & Quality")
             with st.expander("ℹ️ What does this measure?"):
@@ -192,6 +203,16 @@ if st.sidebar.button("Run Analysis", type="primary"):
             if vol_trend > 5:
                 volume_score = 1
                 st.success(f"✓ **Volume Expanding** - Trading activity up {vol_trend:+.1f}% (strong interest)")
+            elif vol_trend < -10:
+                volume_score = -1
+                st.error(f"✗ **Volume Drying Up** - Activity down {vol_trend:.1f}% (losing interest)")
+            else:
+                volume_score = 0
+                st.info(f"~ **Stable Volume** - Normal activity ({vol_trend:+.1f}%)")
+            
+            block2_score = volume_score
+            st.metric("Block 2 Score", f"{block2_score}/3")
+            
             # BLOCK 3: Sentiment & Flows
             st.subheader("🎯 Block 3: Sentiment & Flows")
             with st.expander("ℹ️ What does this measure?"):
@@ -221,6 +242,17 @@ if st.sidebar.button("Run Analysis", type="primary"):
             # Valuation sentiment
             if price_position > 75:
                 valuation_sentiment_score = -1
+                st.error(f"✗ **Overbought** - At {price_position:.0f}% of 52-week range (limited upside)")
+            elif price_position < 25:
+                valuation_sentiment_score = 1
+                st.success(f"✓ **Oversold** - At {price_position:.0f}% of 52-week range (potential opportunity)")
+            else:
+                valuation_sentiment_score = 0
+                st.info(f"~ **Fair Value** - At {price_position:.0f}% of 52-week range")
+            
+            block3_score = performance_score + valuation_sentiment_score
+            st.metric("Block 3 Score", f"{block3_score}/3")
+            
             # BLOCK 4: Valuation & Macro
             st.subheader("💰 Block 4: Valuation & Macro")
             with st.expander("ℹ️ What does this measure?"):
@@ -233,8 +265,18 @@ if st.sidebar.button("Run Analysis", type="primary"):
                 A discount might indicate an opportunity (or a problem - needs more research!).
                 """)
             
-            block4_score = 0ntiment_score = 1
-                st.success(f"✓ **Oversold** - At {price_position:.0f}% of 52-week range (potential opportunity)")
+            block4_score = 0
+            
+            try:
+                ticker_obj = yf.Ticker(ticker)
+                ticker_info = ticker_obj.info
+                pe_ratio = ticker_info.get('trailingPE', None)
+                
+                if pe_ratio:
+                    try:
+                        spy_info = yf.Ticker('SPY').info
+                        spy_pe = spy_info.get('trailingPE', 20.0)
+                        relative_pe = (pe_ratio / spy_pe - 1) * 100
                         
                         if relative_pe < -15:
                             valuation_score = 1
@@ -245,20 +287,20 @@ if st.sidebar.button("Run Analysis", type="primary"):
                         else:
                             valuation_score = 0
                             st.info(f"~ **Fair Value** - Trading {abs(relative_pe):.0f}% {'above' if relative_pe > 0 else 'below'} S&P 500 (reasonable)")
-            else:
-                performance_score = 0
-                st.info("~ Neutral performance")
+                    except:
+                        valuation_score = 0
+                        st.info("~ Fair value assumed")
+                else:
+                    valuation_score = 0
+                    st.info("~ Fair value (P/E N/A)")
+                    
+                block4_score = valuation_score
+            except:
+                block4_score = 0
+                st.info("~ Neutral (fundamentals unavailable)")
             
-            # Valuation sentiment
-            if price_position > 75:
-                valuation_sentiment_score = -1
-                st.error("✗ Extended (>75% of 52w range)")
-            elif price_position < 25:
-                valuation_sentiment_score = 1
-                st.success("✓ Attractive (<25% of 52w range)")
-            else:
-                valuation_sentiment_score = 0
-                st.info("~ Fair value zone")
+            st.metric("Block 4 Score", f"{block4_score}/3")
+            
             # BLOCK 6: Volatility Regime
             st.subheader("📉 Block 6: Volatility Regime")
             with st.expander("ℹ️ What does this measure?"):
@@ -285,7 +327,7 @@ if st.sidebar.button("Run Analysis", type="primary"):
             
             block6_score = vol_regime_score
             st.metric("Block 6 Score", f"{block6_score}/1")
-                        spy_info = yf.Ticker('SPY').info
+            
             # BLOCK 7: Liquidity
             st.subheader("💧 Block 7: Liquidity Conditions")
             with st.expander("ℹ️ What does this measure?"):
@@ -311,48 +353,6 @@ if st.sidebar.button("Run Analysis", type="primary"):
             
             block7_score = liquidity_score
             st.metric("Block 7 Score", f"{block7_score}/1")
-                else:
-                    valuation_score = 0
-                    st.info("~ Fair value (P/E N/A)")
-                    
-                block4_score = valuation_score
-            except:
-                block4_score = 0
-                st.info("~ Neutral (fundamentals unavailable)")
-            
-            st.metric("Block 4 Score", f"{block4_score}/3")
-            
-            # BLOCK 6: Volatility Regime
-            st.subheader("Block 6: Volatility Regime")
-            
-            if vol_z_score > 1.5:
-                vol_regime_score = -1
-                st.error("🔴 High stress (Vol >1.5 SD)")
-            elif vol_z_score < -1.0:
-                vol_regime_score = 0
-                st.warning("🔵 Complacency warning (Low vol)")
-            else:
-                vol_regime_score = 1
-                st.success("🟡 Normal regime")
-            
-            block6_score = vol_regime_score
-            st.metric("Block 6 Score", f"{block6_score}/1")
-            
-            # BLOCK 7: Liquidity
-            st.subheader("Block 7: Liquidity Conditions")
-            
-            if vol_trend > -3 and vol_5d > vol_50d * 0.9:
-                liquidity_score = 1
-                st.success("✓ Healthy liquidity")
-            elif vol_trend < -10 or (daily_range > 2.5 and win_rate < 40):
-                liquidity_score = -1
-                st.error("✗ Liquidity stress")
-            else:
-                liquidity_score = 0
-                st.info("~ Normal liquidity")
-            
-            block7_score = liquidity_score
-            st.metric("Block 7 Score", f"{block7_score}/1")
             
             # FINAL SCORECARD
             st.header("📊 Final Scorecard")
@@ -361,20 +361,9 @@ if st.sidebar.button("Run Analysis", type="primary"):
                 'Trend & Momentum': block1_score,
                 'Breadth & Quality': block2_score,
                 'Sentiment & Flows': block3_score,
-            st.info(meaning)
-            
-            st.markdown("---")
-            st.caption("""
-            **💡 How to use this score:**
-            - **Above +2**: Generally bullish - consider buying or holding
-            - **Between -2 and +2**: Mixed signals - be cautious, wait for clarity
-            - **Below -2**: Generally bearish - consider reducing position or staying out
-            
-            Remember: This is one tool among many. Always consider your personal financial situation, 
-            risk tolerance, and investment timeline.
-            """)
-            
-            # Chartquidity': block7_score
+                'Valuation & Macro': block4_score,
+                'Volatility Regime': block6_score,
+                'Liquidity': block7_score
             }
             
             total_raw = sum(scores.values())
@@ -425,6 +414,17 @@ if st.sidebar.button("Run Analysis", type="primary"):
                 st.markdown(f"**{recommendation}**")
             
             st.info(meaning)
+            
+            st.markdown("---")
+            st.caption("""
+            **💡 How to use this score:**
+            - **Above +2**: Generally bullish - consider buying or holding
+            - **Between -2 and +2**: Mixed signals - be cautious, wait for clarity
+            - **Below -2**: Generally bearish - consider reducing position or staying out
+            
+            Remember: This is one tool among many. Always consider your personal financial situation, 
+            risk tolerance, and investment timeline.
+            """)
             
             # Chart
             st.subheader("Price Chart")
