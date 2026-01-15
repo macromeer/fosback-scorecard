@@ -1,3 +1,6 @@
+<img width="995" height="531" alt="Raw_App_Screenshot" src="https://github.com/user-attachments/assets/33b80c7e-70fa-4cdc-afa4-fd853c6baa94" />
+
+
 # 📊 Fosback Market Logic Scorecard
 
 **Should you buy, hold, or sell that stock?** Get a simple answer based on 7 key factors that professional investors use.
