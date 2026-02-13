@@ -1,4 +1,4 @@
-
+[![Buy me a pizza](https://img.shields.io/badge/Sponsor-🍕-8B4513?logo=github&logoColor=white)](https://github.com/sponsors/macromeer)
 # 📊 Fosback Market Logic Scorecard
 
 **Should you buy, hold, or sell that stock?** Get a simple answer based on 7 key factors that professional investors use.
