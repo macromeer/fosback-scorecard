@@ -33,7 +33,7 @@ Ever wonder if now is a good time to buy, hold, or sell? This app analyzes **6 k
 investors look at, then gives you a simple score from **-5 (Sell)** to **+5 (Buy)**.
 
 **What makes this different?**
-- ✅ Works for any stock or ETF ticker
+- ✅ Works for any stock or ETF listed on Yahoo Finance
 - ✅ Uses the latest daily market data
 - ✅ No complex jargon - clear explanations for each factor
 - ✅ Based on Norman Fosback's proven framework from 1976, updated for today's algo-driven markets
@@ -138,8 +138,9 @@ def load_prices(ticker, days_back):
     raw = yf.download(ticker, start=start_date, end=end_date, progress=False)
     if raw.empty:
         # Raise instead of returning so an empty (possibly rate-limited) result is not cached
-        raise LookupError(f"No price data found for {ticker}. Check the ticker symbol, "
-                          "or try again in a minute if Yahoo Finance is busy.")
+        raise LookupError(f"No price data found for {ticker}. Make sure it is a Yahoo Finance symbol "
+                          "(non-US listings need a suffix, e.g. SAP.DE), or try again in a minute "
+                          "if Yahoo Finance is busy.")
     return raw
 
 
@@ -241,7 +242,12 @@ def run_analysis(ticker, days_back):
 
 # Sidebar for inputs
 st.sidebar.header("Configuration")
-ticker = st.sidebar.text_input("Enter Ticker Symbol", value="GRID").strip().upper()
+ticker = st.sidebar.text_input(
+    "Enter Ticker Symbol",
+    value="GRID",
+    help="Use the Yahoo Finance symbol. Non-US listings need an exchange suffix, "
+         "e.g. NESN.SW (Zurich), SAP.DE (Xetra), VOD.L (London). Search finance.yahoo.com if unsure.",
+).strip().upper()
 days_back = st.sidebar.slider("Days of Historical Data", 365, 1095, 730)
 
 if st.sidebar.button("Run Analysis", type="primary") and ticker:

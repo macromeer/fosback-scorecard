@@ -30,7 +30,9 @@ This tool analyzes **any stock or ETF** and gives you a clear score from **-5 (S
 ## How to Use It
 
 1. **Go to the app**: [fosback-scorecard.streamlit.app](https://fosback-scorecard.streamlit.app)
-2. **Enter a ticker** (like AAPL, TSLA, SPY, or any stock/ETF)
+2. **Enter a [Yahoo Finance](https://finance.yahoo.com) ticker** (like AAPL, TSLA, SPY)
+   - Non-US listings need Yahoo's exchange suffix, e.g. `NESN.SW` (Zurich), `SAP.DE` (Xetra), `VOD.L` (London)
+   - Not sure of the symbol? Search the company on [finance.yahoo.com](https://finance.yahoo.com) and copy the ticker shown there
 3. **Click "Run Analysis"**
 4. **Get your score** and recommendation
 
@@ -75,7 +77,7 @@ Each factor is explained so you understand *why* the score is what it is.
 - ✅ Analyzes multiple factors at once
 - ✅ Uses the latest daily market data
 - ✅ Gives you a clear answer
-- ✅ Works for ANY stock or ETF
+- ✅ Works for any stock or ETF listed on Yahoo Finance
 - ✅ Completely free
 
 ---
