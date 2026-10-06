@@ -36,6 +36,9 @@ This tool analyzes **any stock or ETF** and gives you a clear score from **-5 (S
 3. **Click "Run Analysis"**
 4. **Get your score** and recommendation
 
+Want to line up several at once? Type up to 10 tickers, separated by commas, under **Compare Tickers** and
+click **Compare** for a one-table overview.
+
 That's it! The whole analysis takes ~5 seconds.
 
 ---

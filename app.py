@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Every indicator uses a fixed window (at most 252 sessions), so a fixed download is enough; three years
 # also leaves a full year of history behind each point of the score history chart
 HISTORY_DAYS = 3 * 365
+MAX_COMPARE = 10
 
 # Page config
 st.set_page_config(
@@ -207,18 +208,21 @@ def score_history_chart(history):
     return line + rules
 
 
-def run_analysis(ticker):
+def analyze(ticker):
+    """Indicators, latest metrics, quote info and scored blocks for one ticker."""
     df = prepare_prices(load_prices(ticker))
     if len(df) < MIN_TRADING_DAYS:
-        st.error(f"Insufficient data for {ticker}. Need at least {MIN_TRADING_DAYS} trading days.")
-        return
-
+        raise LookupError(f"Insufficient data for {ticker}. Need at least {MIN_TRADING_DAYS} trading days.")
     df = compute_indicators(df)
     m = latest_metrics(df)
     info = safe_quote_info(ticker)
     market_info = safe_quote_info('SPY')
+    return df, m, info, market_info, score_blocks(m, info['trailing_pe'], market_info['trailing_pe'])
+
+
+def run_analysis(ticker):
+    df, m, info, market_info, blocks = analyze(ticker)
     currency = info['currency']
-    blocks = score_blocks(m, info['trailing_pe'], market_info['trailing_pe'])
 
     # Display current metrics
     st.header(f"{ticker} - Current Metrics")
@@ -324,6 +328,42 @@ def run_analysis(ticker):
     st.caption("**Disclaimer:** For educational purposes only. Not financial advice. Always consult a qualified advisor.")
 
 
+def parse_tickers(text):
+    """Unique, upper-cased tickers from a comma-separated list, in the order given."""
+    return list(dict.fromkeys(t.strip().upper() for t in text.split(',') if t.strip()))
+
+
+def run_comparison(tickers):
+    st.header("📋 Comparison")
+    rows, failures = [], []
+    for ticker in tickers:
+        try:
+            _, m, info, _, blocks = analyze(ticker)
+        except LookupError as e:
+            failures.append(str(e))
+            continue
+        except Exception as e:
+            logger.exception("Comparison failed for %s", ticker)
+            failures.append(f"Something went wrong analyzing {ticker}: {e}")
+            continue
+        score = normalized_score(blocks)
+        rows.append({
+            'Ticker': ticker,
+            'Price': format_price(m['price'], info['currency']),
+            'Score': score,
+            'Recommendation': recommendation(score)[0],
+            **{b.title: signed(b.score) if b.available else '–' for b in blocks},
+        })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
+                     column_config={'Score': st.column_config.NumberColumn(format="%+.2f")})
+        st.caption("Block columns show each block's score; – means no data (for example, no P/E for an ETF). "
+                   "Click a column header to sort. Run a single ticker for the full breakdown.")
+    for failure in failures:
+        st.warning(failure)
+    st.caption("**Disclaimer:** For educational purposes only. Not financial advice. Always consult a qualified advisor.")
+
+
 # Sidebar for inputs
 st.sidebar.header("Configuration")
 ticker = st.sidebar.text_input(
@@ -335,10 +375,25 @@ ticker = st.sidebar.text_input(
 
 if st.sidebar.button("Run Analysis", type="primary") and ticker:
     # Remember the request so the results survive reruns triggered by other widgets
-    st.session_state['analysis_request'] = ticker
+    st.session_state['request'] = ('single', ticker)
 
-request = st.session_state.get('analysis_request')
-if request:
+st.sidebar.markdown("---")
+compare_input = st.sidebar.text_input(
+    "Compare Tickers",
+    value="AAPL, MSFT, NESN.SW",
+    help=f"Comma-separated Yahoo Finance symbols, up to {MAX_COMPARE}.",
+)
+compare_tickers = parse_tickers(compare_input)
+if len(compare_tickers) > MAX_COMPARE:
+    st.sidebar.caption(f"Only the first {MAX_COMPARE} tickers will be compared.")
+if st.sidebar.button("Compare") and compare_tickers:
+    st.session_state['request'] = ('compare', tuple(compare_tickers[:MAX_COMPARE]))
+
+mode, request = st.session_state.get('request', (None, None))
+if mode == 'compare':
+    with st.spinner(f"Comparing {len(request)} tickers..."):
+        run_comparison(request)
+elif mode == 'single':
     with st.spinner(f"Analyzing {request}..."):
         try:
             run_analysis(request)
@@ -348,4 +403,4 @@ if request:
             logger.exception("Analysis failed for %s", request)
             st.error(f"Something went wrong analyzing {request}: {e}. Please try again in a minute.")
 else:
-    st.info("👈 Enter a ticker symbol and click 'Run Analysis' to begin")
+    st.info("👈 Enter a ticker symbol and click 'Run Analysis' to begin, or compare several tickers at once")
