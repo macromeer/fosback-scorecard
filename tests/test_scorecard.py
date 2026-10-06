@@ -14,6 +14,7 @@ from scorecard import (
     sentiment_block,
     trend_momentum_block,
     valuation_block,
+    volatility_block,
 )
 
 BEST_CASE = {
@@ -186,3 +187,38 @@ def test_prepare_prices_flattens_yfinance_multiindex():
     df = prepare_prices(flat)
     assert list(df.columns) == ['date', 'open', 'high', 'low', 'close', 'volume']
     assert len(df) == 5
+
+
+@pytest.mark.parametrize('vol_trend, expected', [(5.1, 1), (5.0, 0), (-10.0, 0), (-10.1, -1)])
+def test_breadth_thresholds(vol_trend, expected):
+    assert breadth_block({**NEUTRAL_CASE, 'vol_trend': vol_trend}).score == expected
+
+
+@pytest.mark.parametrize('roc_50, expected', [(10.1, 1), (10.0, 0), (-10.0, 0), (-10.1, -1)])
+def test_sentiment_performance_thresholds(roc_50, expected):
+    assert sentiment_block({**NEUTRAL_CASE, 'roc_50': roc_50}).signals[0].score == expected
+
+
+@pytest.mark.parametrize('position, expected', [(75.1, -1), (75.0, 0), (25.0, 0), (24.9, 1)])
+def test_sentiment_position_thresholds(position, expected):
+    assert sentiment_block({**NEUTRAL_CASE, 'price_position': position}).signals[1].score == expected
+
+
+@pytest.mark.parametrize('z, expected, tone', [
+    (1.51, -1, 'error'), (1.5, 0, 'info'), (-1.0, 0, 'info'), (-1.01, 0, 'warning'),
+])
+def test_volatility_thresholds(z, expected, tone):
+    signal = volatility_block({**NEUTRAL_CASE, 'vol_z_score': z}).signals[0]
+    assert (signal.score, signal.tone) == (expected, tone)
+
+
+@pytest.mark.parametrize('vol_5d, daily_range, win_rate, expected', [
+    (499_000, 1.0, 50.0, -1),  # last week's volume below half the 50-day average
+    (500_000, 1.0, 50.0, 0),
+    (1_000_000, 2.6, 39.0, -1),  # wide ranges with mostly down days
+    (1_000_000, 2.5, 39.0, 0),
+    (1_000_000, 2.6, 40.0, 0),
+])
+def test_liquidity_thresholds(vol_5d, daily_range, win_rate, expected):
+    m = {**NEUTRAL_CASE, 'vol_5d': vol_5d, 'daily_range': daily_range, 'win_rate': win_rate}
+    assert liquidity_block(m).score == expected
