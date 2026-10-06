@@ -52,7 +52,7 @@ with st.expander("📖 How It Works (Click to Learn More)"):
 
     1. **Trend & Momentum** - Is the price moving up or down? Is it accelerating?
     2. **Breadth & Quality** - Are investors showing real interest (volume)?
-    3. **Sentiment & Flows** - Is it overbought (risky) or oversold (opportunity)?
+    3. **Sentiment & Flows** - Has it gained or lost a lot over the last 50 days?
     4. **Valuation & Macro** - Is it expensive or cheap compared to the market?
     5. **Volatility Regime** - Is the market calm or stressed?
     6. **Liquidity** - Can you easily buy/sell without moving the price?
@@ -92,13 +92,14 @@ BLOCK_EXPLAINERS = {
     Think of it like a product going viral vs. one nobody talks about.
     """,
     'sentiment': """
-    **In simple terms:** Is this a good deal, or has it already run too far?
+    **In simple terms:** How has it been doing lately, and where does it sit in its yearly range?
 
-    - **Recent Performance**: How has it done over the last 50 days?
-    - **52-Week Position**: Is it near its high (expensive) or low (cheap)?
+    - **Recent Performance**: Up or down more than 10% over the last 50 days? This is what gets scored.
+    - **52-Week Position**: Where the price sits between its 52-week low and high. Shown for context only.
 
-    **Why it matters:** Buying near 52-week highs can be risky (might correct).
-    Buying near lows can be an opportunity (if fundamentals are intact).
+    **Why the position is not scored:** A stock near its 52-week high can look "too expensive", but in our
+    10-year backtest stocks near their high went on to do slightly better than average, not worse.
+    Counting it against the stock also cancelled out the uptrend signal for almost every rising stock.
     """,
     'valuation': """
     **In simple terms:** Is this expensive or cheap compared to the overall market (S&P 500)?

@@ -80,17 +80,17 @@ def test_all_neutral_signals_score_zero():
 
 def test_block_ranges_match_signals():
     blocks = score_blocks(BEST_CASE, pe_ratio=10, market_pe=25)
-    assert [b.max_up for b in blocks] == [3, 1, 2, 1, 0, 0]
-    assert [b.max_down for b in blocks] == [3, 1, 2, 1, 1, 1]
+    assert [b.max_up for b in blocks] == [3, 1, 1, 1, 0, 0]
+    assert [b.max_down for b in blocks] == [3, 1, 1, 1, 1, 1]
     assert all(b.score == b.max_up for b in blocks)
 
 
 def test_score_scale_is_asymmetric_but_reaches_both_ends():
-    # One of seven possible positives is worth more than one of nine possible negatives
+    # One of six possible positives is worth more than one of eight possible negatives
     up = score_blocks({**NEUTRAL_CASE, 'roc_50': 15.0}, pe_ratio=20, market_pe=20)
     down = score_blocks({**NEUTRAL_CASE, 'roc_50': -15.0}, pe_ratio=20, market_pe=20)
-    assert normalized_score(up) == pytest.approx(5 / 7)
-    assert normalized_score(down) == pytest.approx(-5 / 9)
+    assert normalized_score(up) == pytest.approx(5 / 6)
+    assert normalized_score(down) == pytest.approx(-5 / 8)
 
 
 def test_volume_trend_only_counts_once():
@@ -210,9 +210,18 @@ def test_sentiment_performance_thresholds(roc_50, expected):
     assert sentiment_block({**NEUTRAL_CASE, 'roc_50': roc_50}).signals[0].score == expected
 
 
-@pytest.mark.parametrize('position, expected', [(75.1, -1), (75.0, 0), (25.0, 0), (24.9, 1)])
-def test_sentiment_position_thresholds(position, expected):
-    assert sentiment_block({**NEUTRAL_CASE, 'price_position': position}).signals[1].score == expected
+@pytest.mark.parametrize('position, label', [
+    (75.1, 'Near 52-Week High'), (75.0, 'Mid-Range'), (25.0, 'Mid-Range'), (24.9, 'Near 52-Week Low'),
+])
+def test_52_week_position_is_shown_but_not_scored(position, label):
+    signal = sentiment_block({**NEUTRAL_CASE, 'price_position': position}).signals[1]
+    assert label in signal.message
+    assert (signal.score, signal.max_up, signal.max_down) == (0, 0, 0)
+
+
+def test_uptrend_near_52_week_high_is_not_cancelled_out():
+    blocks = score_blocks({**BEST_CASE, 'price_position': 95.0}, pe_ratio=10, market_pe=25)
+    assert normalized_score(blocks) == pytest.approx(5.0)
 
 
 @pytest.mark.parametrize('z, expected, tone', [

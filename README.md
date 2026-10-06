@@ -18,7 +18,7 @@ This tool analyzes **any stock or ETF** and gives you a clear score from **-5 (S
 
 - 📈 **Trend & Momentum** - Is it going up or down?
 - 📊 **Trading Volume** - Are people actually buying it?
-- 🎯 **Price Position** - Is it cheap or expensive right now?
+- 🎯 **Recent Performance** - Has it gained or lost a lot over the last 50 days?
 - 💰 **Valuation** - Compared to the overall market
 - 📉 **Volatility** - Is it stable or all over the place?
 - 💧 **Liquidity** - Can you easily trade it?
@@ -67,7 +67,7 @@ Recommendation: 🟢 BUY/HOLD
 ✓ Strong momentum (+8.2% in 20 days)
 ✓ High consistency (70% positive days)
 ~ Volume stable
-✗ Overbought (at 82% of 52-week range)
+~ Near 52-week high (82% of range, shown for context)
 ```
 
 Each factor is explained so you understand *why* the score is what it is.

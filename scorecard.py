@@ -182,13 +182,12 @@ def sentiment_block(m):
     else:
         block.signals.append(Signal(0, f"~ **Neutral Performance** - Flat over 50 days ({roc_50:+.1f}%)"))
 
+    # Shown for context only. Scoring a high position as overbought cancelled the uptrend signal in nearly every
+    # bullish case, and in the backtest stocks near their 52-week high went on to do better, not worse (BACKTEST.md)
     position = m['price_position']
-    if position > 75:
-        block.signals.append(Signal(-1, f"✗ **Overbought** - At {position:.0f}% of 52-week range (limited upside)"))
-    elif position < 25:
-        block.signals.append(Signal(1, f"✓ **Oversold** - At {position:.0f}% of 52-week range (potential opportunity)"))
-    else:
-        block.signals.append(Signal(0, f"~ **Mid-Range** - At {position:.0f}% of 52-week range"))
+    zone = 'Near 52-Week High' if position > 75 else ('Near 52-Week Low' if position < 25 else 'Mid-Range')
+    block.signals.append(Signal(0, f"~ **{zone}** - At {position:.0f}% of 52-week range (for context, not scored)",
+                                max_up=0, max_down=0))
 
     return block
 

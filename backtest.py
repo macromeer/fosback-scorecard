@@ -4,7 +4,7 @@ For every ticker and every session after a one-year warm-up, the score is comput
 at that close and compared with the return over the next 20 and 60 sessions, raw and relative to SPY.
 
     python backtest.py                                  # all variants, default basket, 10 years
-    python backtest.py --variant baseline --variant no-position
+    python backtest.py --variant baseline --variant overbought-penalty
     python backtest.py --tickers AAPL MSFT --years 5 --output BACKTEST.md
 
 Prices are cached in data_cache/ for a day. No Streamlit here; the scoring comes straight from scorecard.py.
@@ -130,33 +130,30 @@ def build_panel(tickers, start, end, verbose=True):
 # Scoring variants
 
 
-def graded_position_sentiment(m):
-    """Sentiment with the 52-week position scored on a sliding scale (+1 at the low, -1 at the high)."""
-    block = scorecard.sentiment_block(m)
+def overbought_oversold_score(m):
+    """The original 52-week position rule: -1 above 75% of the range, +1 below 25%."""
     position = m['price_position']
-    block.signals[1] = Signal(float(np.clip((50 - position) / 50, -1, 1)), "graded position")
-    return block
+    return -1 if position > 75 else (1 if position < 25 else 0)
 
 
-def no_position_sentiment(m):
-    block = scorecard.sentiment_block(m)
-    del block.signals[1]
-    return block
+def with_position_signal(rule):
+    """A sentiment block whose context-only 52-week position signal is scored by `rule(m)` instead."""
+    def sentiment(m):
+        block = scorecard.sentiment_block(m)
+        block.signals[1] = Signal(rule(m), "scored 52-week position")
+        return block
+    return sentiment
 
 
-def overbought_only_when_fading_sentiment(m):
-    """Penalize a high 52-week position only when the 20-day momentum is negative or slipping."""
-    block = scorecard.sentiment_block(m)
-    if block.signals[1].score < 0 and m['roc_20'] >= 0 and m['momentum_change'] >= 0:
-        block.signals[1] = Signal(0, "high but still rising")
-    return block
+def graded_position_score(m):
+    """Sliding scale: +1 at the 52-week low, 0 in the middle, -1 at the high."""
+    return float(np.clip((50 - m['price_position']) / 50, -1, 1))
 
 
-def high_is_bullish_sentiment(m):
-    """Reverse the position signal: near the 52-week high counts for, near the low against."""
-    block = scorecard.sentiment_block(m)
-    block.signals[1] = Signal(-block.signals[1].score, "reversed position")
-    return block
+def overbought_when_fading_score(m):
+    """Original rule, but a high position only counts against when 20-day momentum is negative or slipping."""
+    score = overbought_oversold_score(m)
+    return 0 if score < 0 and m['roc_20'] >= 0 and m['momentum_change'] >= 0 else score
 
 
 @dataclass
@@ -187,15 +184,16 @@ class Variant:
 
 
 VARIANTS = {
-    'baseline': Variant("Current scorecard.py rules"),
-    'no-position': Variant("Sentiment without the 52-week position signal", sentiment=no_position_sentiment),
+    'baseline': Variant("Current scorecard.py rules (52-week position shown for context only, not scored)"),
+    'overbought-penalty': Variant("Original rule: -1 above 75% of the 52-week range, +1 below 25%",
+                                  sentiment=with_position_signal(overbought_oversold_score)),
     'graded-position': Variant("52-week position on a sliding scale instead of the 25%/75% cut-offs",
-                               sentiment=graded_position_sentiment),
-    'fading-overbought': Variant("Overbought only counts when 20-day momentum is negative or slipping",
-                                 sentiment=overbought_only_when_fading_sentiment),
-    'high-is-bullish': Variant("52-week position reversed: near the high counts for, near the low against",
-                               sentiment=high_is_bullish_sentiment),
-    'old-bands': Variant("Pre-task-1d bands: no trend dead band, 60%/40% win rate, one-session momentum change",
+                               sentiment=with_position_signal(graded_position_score)),
+    'fading-overbought': Variant("Original rule, but overbought only counts when 20-day momentum is negative or "
+                                 "slipping", sentiment=with_position_signal(overbought_when_fading_score)),
+    'high-is-bullish': Variant("Original rule reversed: near the 52-week high counts for, near the low against",
+                               sentiment=with_position_signal(lambda m: -overbought_oversold_score(m))),
+    'old-bands': Variant("Earlier bands: no trend dead band, 60%/40% win rate, one-session momentum change",
                          constants={'TREND_DEAD_BAND': 0.0, 'WIN_RATE_HIGH': 60.0, 'WIN_RATE_LOW': 40.0},
                          metrics=lambda m: {**m, 'momentum_change': m['momentum_change_1d']}),
 }
