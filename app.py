@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 import yfinance as yf
@@ -14,6 +15,7 @@ from scorecard import (
     prepare_prices,
     recommendation,
     score_blocks,
+    score_history,
 )
 
 logger = logging.getLogger(__name__)
@@ -193,6 +195,18 @@ def format_price(value, currency):
     return f"{currency} {value:,.2f}" if currency else f"{value:,.2f}"
 
 
+def score_history_chart(history):
+    data = history.reset_index()
+    line = alt.Chart(data).mark_line().encode(
+        x=alt.X('date:T', title=None),
+        y=alt.Y('score:Q', title='Score', scale=alt.Scale(domain=[-5, 5])),
+        tooltip=[alt.Tooltip('date:T'), alt.Tooltip('score:Q', format='+.2f')],
+    )
+    # The recommendation cut-offs
+    rules = alt.Chart(pd.DataFrame({'y': [-3, -1, 1, 3]})).mark_rule(strokeDash=[4, 4], opacity=0.4).encode(y='y:Q')
+    return line + rules
+
+
 def run_analysis(ticker):
     df = prepare_prices(load_prices(ticker))
     if len(df) < MIN_TRADING_DAYS:
@@ -295,6 +309,16 @@ def run_analysis(ticker):
     st.subheader("Price Chart")
     chart_data = df[['date', 'close', 'MA50', 'MA200']].tail(252).set_index('date')
     st.line_chart(chart_data)
+
+    st.subheader("Score History")
+    history = score_history(df)
+    if history.empty:
+        st.caption("Not enough price history yet to show how the score has changed.")
+    else:
+        st.altair_chart(score_history_chart(history), width="stretch")
+        st.caption("The score as it would have read at each close over the last year. Dashed lines mark the "
+                   "recommendation cut-offs (±1, ±3). Valuation is left out because past P/E ratios are not "
+                   "available, so the latest point can differ from the score above.")
 
     # Disclaimer
     st.caption("**Disclaimer:** For educational purposes only. Not financial advice. Always consult a qualified advisor.")
