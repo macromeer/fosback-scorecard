@@ -1,7 +1,7 @@
 [![Buy me a pizza](https://img.shields.io/badge/Sponsor-🍕-8B4513?logo=github&logoColor=white)](https://github.com/sponsors/macromeer)
 # 📊 Fosback Market Logic Scorecard
 
-**Should you buy, hold, or sell that stock?** Get a simple answer based on 7 key factors that professional investors use.
+**Should you buy, hold, or sell that stock?** Get a simple answer based on 6 key factors that professional investors use.
 
 [**🚀 Try the Live App**](https://fosback-scorecard.streamlit.app)
 
@@ -44,7 +44,7 @@ That's it! The whole analysis takes ~5 seconds.
 |-------|---------------|---------------|
 | **+3 to +5** | 🟢 Strong Buy | Most factors look great - strong opportunity |
 | **+1 to +3** | 🟢 Buy/Hold | Generally positive - good time to invest |
-| **-1 to +1** | 🟡 Hold/Wait | Mixed signals - be patient |
+| **-1 to +1** | 🟡 Hold/Reduce to 50% | Mixed signals - be patient, scale back |
 | **-3 to -1** | 🔴 Reduce/Exit | Warning signs - consider selling |
 | **-5 to -3** | 🔴 Strong Sell | Multiple red flags - stay away |
 
@@ -73,7 +73,7 @@ Each factor is explained so you understand *why* the score is what it is.
 
 **This tool**: 
 - ✅ Analyzes multiple factors at once
-- ✅ Uses real-time data
+- ✅ Uses the latest daily market data
 - ✅ Gives you a clear answer
 - ✅ Works for ANY stock or ETF
 - ✅ Completely free
@@ -105,6 +105,8 @@ Based on Norman Fosback's 1976 "Stock Market Logic" framework, updated for today
 - **Data**: Yahoo Finance API
 - **Analysis**: Python (Pandas, NumPy)
 - **Hosting**: Streamlit Cloud (free tier)
+
+To run it yourself: `pip install -r requirements-dev.txt`, then `streamlit run app.py` (app) or `pytest` (tests).
 
 ---
 
