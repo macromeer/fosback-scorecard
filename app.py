@@ -174,16 +174,21 @@ def load_prices(ticker):
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def load_trailing_pe(ticker):
-    return yf.Ticker(ticker).info.get('trailingPE')
+def load_quote_info(ticker):
+    info = yf.Ticker(ticker).info
+    return {'trailing_pe': info.get('trailingPE'), 'currency': info.get('currency')}
 
 
-def safe_trailing_pe(ticker):
+def safe_quote_info(ticker):
     try:
-        return load_trailing_pe(ticker)
+        return load_quote_info(ticker)
     except Exception:
-        logger.warning("Could not load P/E for %s", ticker, exc_info=True)
-        return None
+        logger.warning("Could not load quote info for %s", ticker, exc_info=True)
+        return {'trailing_pe': None, 'currency': None}
+
+
+def format_price(value, currency):
+    return f"{currency} {value:,.2f}" if currency else f"{value:,.2f}"
 
 
 def run_analysis(ticker):
@@ -194,7 +199,9 @@ def run_analysis(ticker):
 
     df = compute_indicators(df)
     m = latest_metrics(df)
-    blocks = score_blocks(m, safe_trailing_pe(ticker), safe_trailing_pe('SPY'))
+    info = safe_quote_info(ticker)
+    currency = info['currency']
+    blocks = score_blocks(m, info['trailing_pe'], safe_quote_info('SPY')['trailing_pe'])
 
     # Display current metrics
     st.header(f"{ticker} - Current Metrics")
@@ -202,10 +209,10 @@ def run_analysis(ticker):
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Price", f"${m['price']:.2f}")
-        st.metric("MA50", f"${m['ma50']:.2f}", f"{((m['price'] - m['ma50']) / m['ma50'] * 100):+.2f}%")
+        st.metric("Price", format_price(m['price'], currency))
+        st.metric("MA50", format_price(m['ma50'], currency), f"{((m['price'] - m['ma50']) / m['ma50'] * 100):+.2f}%")
     with col2:
-        st.metric("MA200", f"${m['ma200']:.2f}", f"{((m['price'] - m['ma200']) / m['ma200'] * 100):+.2f}%")
+        st.metric("MA200", format_price(m['ma200'], currency), f"{((m['price'] - m['ma200']) / m['ma200'] * 100):+.2f}%")
         st.metric("20d ROC", f"{m['roc_20']:+.2f}%")
     with col3:
         st.metric("Volatility (20d)", f"{m['volatility']:.2f}%")
