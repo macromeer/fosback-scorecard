@@ -257,6 +257,19 @@ def run_analysis(ticker):
 
     st.info(meaning)
 
+    metrics_df = pd.DataFrame(
+        list({**m, 'currency': currency, 'trailing_pe': info['trailing_pe'],
+              'normalized_score': score, 'recommendation': label}.items()),
+        columns=['Metric', 'Value'],
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button("⬇️ Download scorecard (CSV)", scorecard_df.to_csv(index=False),
+                           file_name=f"{ticker}_Scorecard.csv", mime="text/csv")
+    with col2:
+        st.download_button("⬇️ Download metrics (CSV)", metrics_df.to_csv(index=False),
+                           file_name=f"{ticker}_Metrics.csv", mime="text/csv")
+
     st.markdown("---")
     st.caption("""
     **💡 How to use this score:**
