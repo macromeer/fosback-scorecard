@@ -6,6 +6,7 @@ import streamlit as st
 import yfinance as yf
 
 from scorecard import (
+    DEFAULT_MARKET_PE,
     MIN_TRADING_DAYS,
     compute_indicators,
     latest_metrics,
@@ -181,10 +182,10 @@ def load_quote_info(ticker):
 
 def safe_quote_info(ticker):
     try:
-        return load_quote_info(ticker)
+        return {**load_quote_info(ticker), 'failed': False}
     except Exception:
         logger.warning("Could not load quote info for %s", ticker, exc_info=True)
-        return {'trailing_pe': None, 'currency': None}
+        return {'trailing_pe': None, 'currency': None, 'failed': True}
 
 
 def format_price(value, currency):
@@ -200,8 +201,9 @@ def run_analysis(ticker):
     df = compute_indicators(df)
     m = latest_metrics(df)
     info = safe_quote_info(ticker)
+    market_info = safe_quote_info('SPY')
     currency = info['currency']
-    blocks = score_blocks(m, info['trailing_pe'], safe_quote_info('SPY')['trailing_pe'])
+    blocks = score_blocks(m, info['trailing_pe'], market_info['trailing_pe'])
 
     # Display current metrics
     st.header(f"{ticker} - Current Metrics")
@@ -227,6 +229,13 @@ def run_analysis(ticker):
             st.markdown(BLOCK_EXPLAINERS[block.key])
         for signal in block.signals:
             TONE_RENDERERS[signal.tone](signal.message)
+        if block.key == 'valuation':
+            if info['failed']:
+                st.caption(f"⚠️ Yahoo Finance did not answer the P/E request for {ticker}, so valuation was left out. "
+                           "This is usually temporary; try again in a few minutes.")
+            elif market_info['failed']:
+                st.caption("⚠️ Yahoo Finance did not answer the S&P 500 (SPY) P/E request, so a market P/E of "
+                           f"{DEFAULT_MARKET_PE:g} was assumed. This is usually temporary.")
         st.metric(f"Block {number} Score", signed(block.score), help=f"Possible range: {score_range(block)}")
 
     # FINAL SCORECARD
