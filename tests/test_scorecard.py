@@ -27,6 +27,13 @@ WORST_CASE = {
     'vol_z_score': 2.0, 'vol_5d': 500_000, 'vol_50d': 900_000, 'daily_range': 3.0,
 }
 
+NEUTRAL_CASE = {
+    'price': 100.0, 'ma50': 100.0, 'ma200': 100.0,
+    'roc_20': 0.0, 'momentum_change': 0.0, 'win_rate': 50.0,
+    'vol_trend': 0.0, 'roc_50': 0.0, 'price_position': 50.0,
+    'vol_z_score': 0.0, 'vol_5d': 1_000_000, 'vol_50d': 1_000_000, 'daily_range': 1.0,
+}
+
 
 def make_prices(days=300, volume=None, seed=0):
     rng = np.random.default_rng(seed)
@@ -53,10 +60,26 @@ def test_all_unfavorable_signals_reach_minus_five():
     assert recommendation(normalized_score(blocks))[0] == "🔴 STRONG SELL"
 
 
-def test_block_max_scores_match_signal_counts():
+def test_all_neutral_signals_score_zero():
+    blocks = score_blocks(NEUTRAL_CASE, pe_ratio=20, market_pe=20)
+    assert all(b.score == 0 for b in blocks)
+    assert normalized_score(blocks) == 0
+    assert recommendation(normalized_score(blocks))[0] == "🟡 HOLD / REDUCE TO 50%"
+
+
+def test_block_ranges_match_signals():
     blocks = score_blocks(BEST_CASE, pe_ratio=10, market_pe=25)
-    assert [b.max_score for b in blocks] == [3, 1, 2, 1, 1, 1]
-    assert all(b.score == b.max_score for b in blocks)
+    assert [b.max_up for b in blocks] == [3, 1, 2, 1, 0, 0]
+    assert [b.max_down for b in blocks] == [3, 1, 2, 1, 1, 1]
+    assert all(b.score == b.max_up for b in blocks)
+
+
+def test_score_scale_is_asymmetric_but_reaches_both_ends():
+    # One of seven possible positives is worth more than one of nine possible negatives
+    up = score_blocks({**NEUTRAL_CASE, 'roc_50': 15.0}, pe_ratio=20, market_pe=20)
+    down = score_blocks({**NEUTRAL_CASE, 'roc_50': -15.0}, pe_ratio=20, market_pe=20)
+    assert normalized_score(up) == pytest.approx(5 / 7)
+    assert normalized_score(down) == pytest.approx(-5 / 9)
 
 
 def test_fading_momentum_on_rising_stock_does_not_say_down():

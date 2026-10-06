@@ -50,6 +50,9 @@ That's it! The whole analysis takes ~5 seconds.
 | **-3 to -1** | 🔴 Reduce/Exit | Warning signs - consider selling |
 | **-5 to -3** | 🔴 Strong Sell | Multiple red flags - stay away |
 
+A stock where nothing stands out scores 0. Volatility and liquidity can only pull the score down:
+calm, easy-to-trade conditions are normal and are not a reason to buy.
+
 ---
 
 ## Example: Analyzing Apple (AAPL)

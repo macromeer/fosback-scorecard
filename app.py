@@ -109,7 +109,9 @@ BLOCK_EXPLAINERS = {
     **Why it matters:**
     - High volatility = stress/panic = risky but potential opportunities
     - Too low = complacency = danger (calm before the storm)
-    - Normal = healthy market conditions
+    - Normal = no extra risk, but also no reason to buy
+
+    This block can only lower the score: normal volatility counts as neutral, high stress counts against.
     """,
     'liquidity': """
     **In simple terms:** How easy is it to buy or sell without affecting the price?
@@ -119,8 +121,18 @@ BLOCK_EXPLAINERS = {
 
     **Why it matters:** Low liquidity means you might struggle to sell when you want,
     or face big price swings. Good liquidity = smoother trading experience.
+
+    This block can only lower the score: normal liquidity counts as neutral, liquidity stress counts against.
     """,
 }
+
+def signed(n):
+    return f"{n:+d}" if n else "0"
+
+
+def score_range(block):
+    return f"{signed(-block.max_down)} to {signed(block.max_up)}"
+
 
 TONE_RENDERERS = {
     'success': st.success,
@@ -191,14 +203,15 @@ def run_analysis(ticker, days_back):
             st.markdown(BLOCK_EXPLAINERS[block.key])
         for signal in block.signals:
             TONE_RENDERERS[signal.tone](signal.message)
-        st.metric(f"Block {number} Score", f"{block.score}/{block.max_score}")
+        st.metric(f"Block {number} Score", signed(block.score), help=f"Possible range: {score_range(block)}")
 
     # FINAL SCORECARD
     st.header("📊 Final Scorecard")
 
     scorecard_df = pd.DataFrame({
         'Category': [b.title for b in blocks],
-        'Score': [f"{b.score}/{b.max_score}" for b in blocks],
+        'Score': [signed(b.score) for b in blocks],
+        'Range': [score_range(b) for b in blocks],
         'Status': [('✓ FAVORABLE' if b.score > 0 else ('✗ UNFAVORABLE' if b.score < 0 else '~ NEUTRAL')) for b in blocks]
     })
 

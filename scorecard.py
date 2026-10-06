@@ -17,6 +17,8 @@ class Signal:
     score: int  # -1, 0 or +1
     message: str
     tone: str = ''  # 'success', 'error', 'info' or 'warning'; derived from score when empty
+    max_up: int = 1  # most this signal can ever add; 0 for signals that can only warn
+    max_down: int = 1
 
     def __post_init__(self):
         if not self.tone:
@@ -34,8 +36,12 @@ class Block:
         return sum(s.score for s in self.signals)
 
     @property
-    def max_score(self):
-        return len(self.signals)
+    def max_up(self):
+        return sum(s.max_up for s in self.signals)
+
+    @property
+    def max_down(self):
+        return sum(s.max_down for s in self.signals)
 
 
 def prepare_prices(raw):
@@ -190,26 +196,26 @@ def valuation_block(pe_ratio, market_pe):
 def volatility_block(m):
     block = Block('volatility', 'Volatility Regime')
     z = m['vol_z_score']
+    # Calm volatility is the normal state, not a reason to buy, so this signal can only subtract
     if z > 1.5:
         block.signals.append(Signal(-1, f"✗ **High Stress** - Volatility {z:.1f} standard deviations above its recent norm "
-                                        "(market fear/uncertainty)"))
+                                        "(market fear/uncertainty)", max_up=0))
     elif z < -1.0:
         block.signals.append(Signal(0, f"~ **Complacency Warning** - Volatility unusually low (Z-score: {z:.2f}, "
-                                       "risk of sudden reversal)", tone='warning'))
+                                       "risk of sudden reversal)", tone='warning', max_up=0))
     else:
-        block.signals.append(Signal(1, f"✓ **Normal Regime** - Volatility at healthy levels (Z-score: {z:.2f})"))
+        block.signals.append(Signal(0, f"~ **Normal Regime** - Volatility at its usual level (Z-score: {z:.2f})", max_up=0))
     return block
 
 
 def liquidity_block(m):
     block = Block('liquidity', 'Liquidity Conditions')
     vol_trend = m['vol_trend']
-    if vol_trend > -3 and m['vol_5d'] > m['vol_50d'] * 0.9:
-        block.signals.append(Signal(1, "✓ **Healthy Liquidity** - Easy to trade, stable volume"))
-    elif vol_trend < -10 or (m['daily_range'] > 2.5 and m['win_rate'] < 40):
-        block.signals.append(Signal(-1, "✗ **Liquidity Stress** - Low volume or erratic prices (be cautious)"))
+    # Being easy to trade is the normal state, not a reason to buy, so this signal can only subtract
+    if vol_trend < -10 or (m['daily_range'] > 2.5 and m['win_rate'] < 40):
+        block.signals.append(Signal(-1, "✗ **Liquidity Stress** - Low volume or erratic prices (be cautious)", max_up=0))
     else:
-        block.signals.append(Signal(0, "~ **Normal Liquidity** - Standard trading conditions"))
+        block.signals.append(Signal(0, "~ **Normal Liquidity** - Standard trading conditions", max_up=0))
     return block
 
 
@@ -225,9 +231,15 @@ def score_blocks(m, pe_ratio=None, market_pe=None):
 
 
 def normalized_score(blocks):
-    """Scale the raw total onto -5..+5 using the real maximum of the scored signals."""
-    total_max = sum(b.max_score for b in blocks)
-    return sum(b.score for b in blocks) / total_max * 5 if total_max else 0.0
+    """Scale the raw total onto -5..+5.
+
+    Some signals can only subtract, so the best and worst possible totals differ in size. Positive totals are
+    scaled by the best possible total and negative ones by the worst, so both ends of the scale stay reachable
+    and an all-neutral reading lands exactly on 0.
+    """
+    total = sum(b.score for b in blocks)
+    limit = sum(b.max_up for b in blocks) if total > 0 else sum(b.max_down for b in blocks)
+    return total / limit * 5 if limit else 0.0
 
 
 def recommendation(score):
