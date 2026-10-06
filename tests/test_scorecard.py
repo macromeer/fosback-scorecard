@@ -18,7 +18,7 @@ from scorecard import (
 
 BEST_CASE = {
     'price': 110.0, 'ma50': 105.0, 'ma200': 100.0,
-    'roc_20': 8.0, 'momentum_change': 0.5, 'win_rate': 65.0,
+    'roc_20': 8.0, 'momentum_change': 0.5, 'win_rate': 70.0,
     'vol_trend': 20.0, 'roc_50': 15.0, 'price_position': 20.0,
     'vol_z_score': 0.0, 'vol_5d': 1_000_000, 'vol_50d': 900_000, 'daily_range': 1.0,
 }
@@ -105,6 +105,38 @@ def test_mid_range_position_is_not_called_fair_value():
     message = sentiment_block(NEUTRAL_CASE).signals[1].message
     assert "Mid-Range" in message
     assert "Fair Value" not in message
+
+
+def test_flat_noisy_series_is_mixed_trend():
+    rng = np.random.default_rng(1)
+    close = 100 + rng.uniform(-0.05, 0.05, 300)
+    df = make_prices()
+    df = df.assign(open=close, high=close * 1.001, low=close * 0.999, close=close)
+    trend = trend_momentum_block(latest_metrics(compute_indicators(df))).signals[0]
+    assert "Mixed Trend" in trend.message
+
+
+@pytest.mark.parametrize('price, ma50, ma200, expected', [
+    (100.5, 100.0, 99.0, 0),   # price within 1% of MA50
+    (102.0, 100.0, 99.5, 0),   # MA50 within 1% of MA200
+    (102.0, 100.0, 98.0, 1),
+    (99.5, 100.0, 101.0, 0),
+    (98.0, 100.0, 102.0, -1),
+])
+def test_trend_needs_a_clear_gap_between_averages(price, ma50, ma200, expected):
+    m = {**NEUTRAL_CASE, 'price': price, 'ma50': ma50, 'ma200': ma200}
+    assert trend_momentum_block(m).signals[0].score == expected
+
+
+def test_momentum_change_spans_five_sessions():
+    df = compute_indicators(make_prices())
+    expected = df['ROC_20d'] - df['ROC_20d'].shift(5)
+    pd.testing.assert_series_equal(df['Momentum_Change'], expected, check_names=False)
+
+
+@pytest.mark.parametrize('win_rate, expected', [(70, 1), (65, 0), (60, 0), (40, 0), (35, 0), (30, -1)])
+def test_win_rate_neutral_band(win_rate, expected):
+    assert trend_momentum_block({**NEUTRAL_CASE, 'win_rate': win_rate}).signals[2].score == expected
 
 
 def test_fading_momentum_on_rising_stock_does_not_say_down():

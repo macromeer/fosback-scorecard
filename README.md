@@ -65,7 +65,7 @@ Recommendation: 🟢 BUY/HOLD
 
 ✓ Uptrend confirmed
 ✓ Strong momentum (+8.2% in 20 days)
-✓ High consistency (65% positive days)
+✓ High consistency (70% positive days)
 ~ Volume stable
 ✗ Overbought (at 82% of 52-week range)
 ```

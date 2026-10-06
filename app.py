@@ -70,9 +70,11 @@ BLOCK_EXPLAINERS = {
     'trend': """
     **In simple terms:** Is the stock going up or down, and how fast?
 
-    - **Trend**: We compare current price to its 50-day and 200-day averages
-    - **Momentum**: How much has it moved in the last 20 days?
-    - **Consistency**: Does it have more "up days" than "down days"?
+    - **Trend**: Is the price more than 1% above its 50-day average, and that average more than 1% above
+      the 200-day average (or both clearly below)? Anything closer counts as mixed.
+    - **Momentum**: How much has it moved in the last 20 days, and has that pace picked up or slipped
+      over the last week?
+    - **Consistency**: Were more than 65% (or fewer than 35%) of the last 20 sessions up days?
 
     **Why it matters:** You want to buy stocks moving up with strong momentum, not falling knives.
     """,

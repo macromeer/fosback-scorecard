@@ -11,6 +11,12 @@ import pandas as pd
 MIN_TRADING_DAYS = 200
 DEFAULT_MARKET_PE = 20.0
 
+# Provisional thresholds; see BACKTEST.md for how they were checked against forward returns
+TREND_DEAD_BAND = 1.0  # % gap required between price, MA50 and MA200 before calling a trend direction
+MOMENTUM_LOOKBACK = 5  # sessions over which a change in the 20-day return counts as fading/accelerating
+WIN_RATE_HIGH = 65.0
+WIN_RATE_LOW = 35.0
+
 
 @dataclass
 class Signal:
@@ -68,7 +74,7 @@ def compute_indicators(df):
     df['Volatility_MA60'] = df['Volatility_20d'].rolling(window=60).mean()
     df['ROC_20d'] = df['close'].pct_change(20) * 100
     df['ROC_50d'] = df['close'].pct_change(50) * 100
-    df['Momentum_Change'] = df['ROC_20d'].diff()
+    df['Momentum_Change'] = df['ROC_20d'].diff(MOMENTUM_LOOKBACK)
     df['Daily_Range'] = ((df['high'] - df['low']) / df['close']) * 100
     # Last 20 sessions' average volume vs. the 20 sessions before that
     df['Volume_Trend'] = (df['Volume_MA20'] / df['Volume_MA20'].shift(20) - 1) * 100
@@ -113,12 +119,14 @@ def _as_positive_float(value):
 def trend_momentum_block(m):
     block = Block('trend', 'Trend & Momentum')
 
-    if m['price'] > m['ma50'] and m['ma50'] > m['ma200']:
-        block.signals.append(Signal(1, "✓ **Uptrend Confirmed** - Price is above both moving averages"))
-    elif m['price'] < m['ma50'] and m['ma50'] < m['ma200']:
-        block.signals.append(Signal(-1, "✗ **Downtrend** - Price is below moving averages"))
+    up, down = 1 + TREND_DEAD_BAND / 100, 1 - TREND_DEAD_BAND / 100
+    if m['price'] > m['ma50'] * up and m['ma50'] > m['ma200'] * up:
+        block.signals.append(Signal(1, "✓ **Uptrend Confirmed** - Price is clearly above both moving averages"))
+    elif m['price'] < m['ma50'] * down and m['ma50'] < m['ma200'] * down:
+        block.signals.append(Signal(-1, "✗ **Downtrend** - Price is clearly below both moving averages"))
     else:
-        block.signals.append(Signal(0, "~ **Mixed Trend** - No clear direction"))
+        block.signals.append(Signal(0, f"~ **Mixed Trend** - No clear direction (price and averages are not stacked "
+                                       f"at least {TREND_DEAD_BAND:g}% apart)"))
 
     roc_20, momentum_change = m['roc_20'], m['momentum_change']
     if roc_20 > 5 and momentum_change > 0:
@@ -127,14 +135,14 @@ def trend_momentum_block(m):
         block.signals.append(Signal(-1, f"✗ **Weak Momentum** - Down {abs(roc_20):.1f}% in 20 days"))
     elif momentum_change < -2:
         block.signals.append(Signal(-1, f"✗ **Momentum Fading** - 20-day change slipped {abs(momentum_change):.1f} points "
-                                        f"in the last session (now {roc_20:+.1f}%)"))
+                                        f"over the last {MOMENTUM_LOOKBACK} sessions (now {roc_20:+.1f}%)"))
     else:
         block.signals.append(Signal(0, f"~ **Neutral Momentum** - Sideways movement ({roc_20:+.1f}%)"))
 
     win_rate = m['win_rate']
-    if win_rate > 60:
+    if win_rate > WIN_RATE_HIGH:
         block.signals.append(Signal(1, f"✓ **High Consistency** - {win_rate:.1f}% of days are positive (reliable uptrend)"))
-    elif win_rate < 40:
+    elif win_rate < WIN_RATE_LOW:
         block.signals.append(Signal(-1, f"✗ **Low Consistency** - Only {win_rate:.1f}% of days are positive (choppy/weak)"))
     else:
         block.signals.append(Signal(0, f"~ **Moderate Consistency** - {win_rate:.1f}% positive days"))
