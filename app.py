@@ -17,6 +17,10 @@ from scorecard import (
 
 logger = logging.getLogger(__name__)
 
+# Every indicator uses a fixed window (at most 252 sessions), so a fixed download is enough; three years
+# also leaves a full year of history behind each point of the score history chart
+HISTORY_DAYS = 3 * 365
+
 # Page config
 st.set_page_config(
     page_title="Fosback Market Logic Scorecard",
@@ -156,8 +160,8 @@ TONE_RENDERERS = {
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_prices(ticker, days_back):
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+def load_prices(ticker):
+    start_date = (datetime.now() - timedelta(days=HISTORY_DAYS)).strftime('%Y-%m-%d')
     # yfinance treats `end` as exclusive, so today's incomplete session is left out
     end_date = datetime.now().strftime('%Y-%m-%d')
     raw = yf.download(ticker, start=start_date, end=end_date, progress=False)
@@ -182,8 +186,8 @@ def safe_trailing_pe(ticker):
         return None
 
 
-def run_analysis(ticker, days_back):
-    df = prepare_prices(load_prices(ticker, days_back))
+def run_analysis(ticker):
+    df = prepare_prices(load_prices(ticker))
     if len(df) < MIN_TRADING_DAYS:
         st.error(f"Insufficient data for {ticker}. Need at least {MIN_TRADING_DAYS} trading days.")
         return
@@ -274,21 +278,20 @@ ticker = st.sidebar.text_input(
     help="Use the Yahoo Finance symbol. Non-US listings need an exchange suffix, "
          "e.g. NESN.SW (Zurich), SAP.DE (Xetra), VOD.L (London). Search finance.yahoo.com if unsure.",
 ).strip().upper()
-days_back = st.sidebar.slider("Days of Historical Data", 365, 1095, 730)
 
 if st.sidebar.button("Run Analysis", type="primary") and ticker:
     # Remember the request so the results survive reruns triggered by other widgets
-    st.session_state['analysis_request'] = (ticker, days_back)
+    st.session_state['analysis_request'] = ticker
 
 request = st.session_state.get('analysis_request')
 if request:
-    with st.spinner(f"Analyzing {request[0]}..."):
+    with st.spinner(f"Analyzing {request}..."):
         try:
-            run_analysis(*request)
+            run_analysis(request)
         except LookupError as e:
             st.error(str(e))
         except Exception as e:
-            logger.exception("Analysis failed for %s", request[0])
-            st.error(f"Something went wrong analyzing {request[0]}: {e}. Please try again in a minute.")
+            logger.exception("Analysis failed for %s", request)
+            st.error(f"Something went wrong analyzing {request}: {e}. Please try again in a minute.")
 else:
     st.info("👈 Enter a ticker symbol and click 'Run Analysis' to begin")
