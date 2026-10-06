@@ -180,6 +180,16 @@ def test_zero_volume_does_not_produce_infinities():
     assert all("nan" not in s.message.lower() for b in blocks for s in b.signals)
 
 
+def test_prepare_prices_keeps_rows_with_missing_volume():
+    raw = make_prices(days=300).set_index('date')
+    raw.loc[raw.index[-30], 'volume'] = np.nan
+    raw.loc[raw.index[-60], 'close'] = np.nan
+    df = prepare_prices(raw)
+    assert len(df) == 299
+    m = latest_metrics(compute_indicators(df))
+    assert m['vol_trend'] == pytest.approx(0.0)
+
+
 def test_prepare_prices_flattens_yfinance_multiindex():
     flat = make_prices(days=5).set_index('date')
     flat.index.name = 'Date'
@@ -222,3 +232,48 @@ def test_volatility_thresholds(z, expected, tone):
 def test_liquidity_thresholds(vol_5d, daily_range, win_rate, expected):
     m = {**NEUTRAL_CASE, 'vol_5d': vol_5d, 'daily_range': daily_range, 'win_rate': win_rate}
     assert liquidity_block(m).score == expected
+
+
+def tiny_prices(close, high=None, low=None):
+    close = np.asarray(close, dtype=float)
+    return pd.DataFrame({
+        'date': pd.bdate_range('2024-01-01', periods=len(close)),
+        'open': close, 'close': close,
+        'high': close if high is None else np.asarray(high, dtype=float),
+        'low': close if low is None else np.asarray(low, dtype=float),
+        'volume': np.full(len(close), 1000.0),
+    })
+
+
+def test_ma50_is_mean_of_last_50_closes():
+    df = compute_indicators(tiny_prices(np.arange(1, 61)))
+    assert df['MA50'].iloc[-1] == pytest.approx(np.mean(np.arange(11, 61)))
+    assert pd.isna(df['MA50'].iloc[48])
+
+
+def test_price_position_uses_52_week_high_and_low():
+    close = np.full(300, 100.0)
+    high, low = close + 1, close - 1
+    high[30] = 200.0  # older than 252 sessions, ignored
+    high[200] = 150.0
+    low[250] = 50.0
+    m = latest_metrics(compute_indicators(tiny_prices(close, high, low)))
+    assert m['price_position'] == pytest.approx((100 - 50) / (150 - 50) * 100)
+
+
+def test_volatility_is_annualized_percent():
+    # Alternating +1% / -1% returns: sample std of the 20 returns times sqrt(252), in percent
+    close = 100 * np.cumprod(np.r_[1.0, np.tile([1.01, 1 / 1.01], 15)])
+    df = compute_indicators(tiny_prices(close))
+    returns = pd.Series(close).pct_change().iloc[-20:]
+    assert df['Volatility_20d'].iloc[-1] == pytest.approx(returns.std() * np.sqrt(252) * 100)
+    assert df['Volatility_20d'].iloc[-1] == pytest.approx(16.21, abs=0.01)
+
+
+def test_win_rate_counts_up_days_in_last_20():
+    steps = np.r_[np.ones(10), np.full(13, -1.0), np.ones(7)]  # last 20 steps: 13 down, 7 up
+    close = 100 + np.cumsum(np.r_[0.0, steps])
+    df = compute_indicators(tiny_prices(close))
+    last_20 = np.diff(close)[-20:]
+    assert df['Win_Rate'].iloc[-1] == pytest.approx((last_20 > 0).sum() / 20 * 100)
+    assert df['Win_Rate'].iloc[-1] == pytest.approx(35.0)

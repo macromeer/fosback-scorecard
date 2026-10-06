@@ -61,14 +61,15 @@ def prepare_prices(raw):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if col[0] != '' else col[1] for col in df.columns]
     df.columns = [str(col).lower().replace(' ', '_') for col in df.columns]
-    return df.dropna().sort_values('date').reset_index(drop=True)
+    # Only a missing close makes a row unusable; dropping rows with a missing volume would shift every price window
+    return df.dropna(subset=['close']).sort_values('date').reset_index(drop=True)
 
 
 def compute_indicators(df):
     df = df.copy()
     df['MA50'] = df['close'].rolling(window=50).mean()
     df['MA200'] = df['close'].rolling(window=200).mean()
-    df['Volume_MA20'] = df['volume'].rolling(window=20).mean()
+    df['Volume_MA20'] = df['volume'].rolling(window=20, min_periods=15).mean()  # tolerates a few missing volumes
     df['Returns'] = df['close'].pct_change()
     df['Volatility_20d'] = df['Returns'].rolling(window=20).std() * np.sqrt(252) * 100
     df['Volatility_MA60'] = df['Volatility_20d'].rolling(window=60).mean()
