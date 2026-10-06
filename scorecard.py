@@ -19,6 +19,7 @@ class Signal:
     tone: str = ''  # 'success', 'error', 'info' or 'warning'; derived from score when empty
     max_up: int = 1  # most this signal can ever add; 0 for signals that can only warn
     max_down: int = 1
+    available: bool = True  # False when the data behind the signal is missing; it then counts toward no maximum
 
     def __post_init__(self):
         if not self.tone:
@@ -37,11 +38,15 @@ class Block:
 
     @property
     def max_up(self):
-        return sum(s.max_up for s in self.signals)
+        return sum(s.max_up for s in self.signals if s.available)
 
     @property
     def max_down(self):
-        return sum(s.max_down for s in self.signals)
+        return sum(s.max_down for s in self.signals if s.available)
+
+    @property
+    def available(self):
+        return any(s.available for s in self.signals)
 
 
 def prepare_prices(raw):
@@ -141,7 +146,7 @@ def breadth_block(m):
     block = Block('breadth', 'Breadth & Quality')
     vol_trend = m['vol_trend']
     if pd.isna(vol_trend):
-        block.signals.append(Signal(0, "~ **Volume Unavailable** - No reliable volume data for this ticker"))
+        block.signals.append(Signal(0, "~ **Volume Unavailable** - No reliable volume data for this ticker", available=False))
     elif vol_trend > 5:
         block.signals.append(Signal(1, f"✓ **Volume Expanding** - Average daily volume up {vol_trend:.1f}% vs. the prior 20 days (strong interest)"))
     elif vol_trend < -10:
@@ -179,7 +184,8 @@ def valuation_block(pe_ratio, market_pe):
     market_pe = _as_positive_float(market_pe) or DEFAULT_MARKET_PE
 
     if pe_ratio is None:
-        block.signals.append(Signal(0, "~ **Fair Value Assumed** - P/E not available"))
+        block.signals.append(Signal(0, "~ **Valuation Unknown** - P/E not available, so valuation is left out of the score",
+                                    available=False))
         return block
 
     relative_pe = (pe_ratio / market_pe - 1) * 100
@@ -197,7 +203,10 @@ def volatility_block(m):
     block = Block('volatility', 'Volatility Regime')
     z = m['vol_z_score']
     # Calm volatility is the normal state, not a reason to buy, so this signal can only subtract
-    if z > 1.5:
+    if pd.isna(z):
+        block.signals.append(Signal(0, "~ **Volatility Unavailable** - Not enough price movement to measure a regime",
+                                    max_up=0, available=False))
+    elif z > 1.5:
         block.signals.append(Signal(-1, f"✗ **High Stress** - Volatility {z:.1f} standard deviations above its recent norm "
                                         "(market fear/uncertainty)", max_up=0))
     elif z < -1.0:

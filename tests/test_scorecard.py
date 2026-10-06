@@ -62,6 +62,12 @@ def test_all_unfavorable_signals_reach_minus_five():
     assert recommendation(normalized_score(blocks))[0] == "🔴 STRONG SELL"
 
 
+@pytest.mark.parametrize('case, expected', [(BEST_CASE, 5.0), (WORST_CASE, -5.0)])
+def test_missing_data_does_not_cap_the_score(case, expected):
+    blocks = score_blocks({**case, 'vol_trend': float('nan'), 'vol_z_score': float('nan')}, pe_ratio=None)
+    assert normalized_score(blocks) == pytest.approx(expected)
+
+
 def test_all_neutral_signals_score_zero():
     blocks = score_blocks(NEUTRAL_CASE, pe_ratio=20, market_pe=20)
     assert all(b.score == 0 for b in blocks)
@@ -111,6 +117,7 @@ def test_falling_stock_message_has_no_double_negative():
 def test_unusable_pe_is_neutral(pe):
     block = valuation_block(pe, 25)
     assert block.score == 0
+    assert (block.max_up, block.max_down) == (0, 0)
     assert "not available" in block.signals[0].message
 
 
@@ -129,7 +136,8 @@ def test_zero_volume_does_not_produce_infinities():
     blocks = score_blocks(m)
     assert pd.isna(m['vol_trend'])
     assert blocks[1].score == 0
-    assert "nan" not in blocks[1].signals[0].message.lower()
+    assert not blocks[1].signals[0].available
+    assert all("nan" not in s.message.lower() for b in blocks for s in b.signals)
 
 
 def test_prepare_prices_flattens_yfinance_multiindex():

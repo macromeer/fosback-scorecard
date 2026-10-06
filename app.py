@@ -100,6 +100,9 @@ BLOCK_EXPLAINERS = {
 
     **Why it matters:** A stock trading at a big premium needs exceptional growth to justify it.
     A discount might indicate an opportunity (or a problem - needs more research!).
+
+    Most ETFs and companies without earnings have no P/E. This block is then left out of the score
+    instead of being counted as neutral.
     """,
     'volatility': """
     **In simple terms:** How wild are the price swings? Is the market calm or panicking?
@@ -131,7 +134,15 @@ def signed(n):
 
 
 def score_range(block):
+    if not block.available:
+        return "not scored (no data)"
     return f"{signed(-block.max_down)} to {signed(block.max_up)}"
+
+
+def block_status(block):
+    if not block.available:
+        return '– NOT SCORED'
+    return '✓ FAVORABLE' if block.score > 0 else ('✗ UNFAVORABLE' if block.score < 0 else '~ NEUTRAL')
 
 
 TONE_RENDERERS = {
@@ -212,7 +223,7 @@ def run_analysis(ticker, days_back):
         'Category': [b.title for b in blocks],
         'Score': [signed(b.score) for b in blocks],
         'Range': [score_range(b) for b in blocks],
-        'Status': [('✓ FAVORABLE' if b.score > 0 else ('✗ UNFAVORABLE' if b.score < 0 else '~ NEUTRAL')) for b in blocks]
+        'Status': [block_status(b) for b in blocks]
     })
 
     st.dataframe(scorecard_df, width="stretch", hide_index=True)

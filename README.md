@@ -52,6 +52,8 @@ That's it! The whole analysis takes ~5 seconds.
 
 A stock where nothing stands out scores 0. Volatility and liquidity can only pull the score down:
 calm, easy-to-trade conditions are normal and are not a reason to buy.
+When data is missing (for example, most ETFs have no P/E ratio), that factor is left out of the score
+rather than counted as neutral, so the full -5 to +5 range is still possible.
 
 ---
 
