@@ -11,6 +11,7 @@ from scorecard import (
     prepare_prices,
     recommendation,
     score_blocks,
+    sentiment_block,
     trend_momentum_block,
     valuation_block,
 )
@@ -98,6 +99,12 @@ def test_volume_trend_only_counts_once():
 
 def test_collapsing_recent_volume_is_liquidity_stress():
     assert liquidity_block({**NEUTRAL_CASE, 'vol_5d': 400_000, 'vol_50d': 1_000_000}).score == -1
+
+
+def test_mid_range_position_is_not_called_fair_value():
+    message = sentiment_block(NEUTRAL_CASE).signals[1].message
+    assert "Mid-Range" in message
+    assert "Fair Value" not in message
 
 
 def test_fading_momentum_on_rising_stock_does_not_say_down():

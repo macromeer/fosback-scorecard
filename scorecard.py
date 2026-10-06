@@ -173,7 +173,7 @@ def sentiment_block(m):
     elif position < 25:
         block.signals.append(Signal(1, f"✓ **Oversold** - At {position:.0f}% of 52-week range (potential opportunity)"))
     else:
-        block.signals.append(Signal(0, f"~ **Fair Value** - At {position:.0f}% of 52-week range"))
+        block.signals.append(Signal(0, f"~ **Mid-Range** - At {position:.0f}% of 52-week range"))
 
     return block
 
