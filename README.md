@@ -5,8 +5,7 @@
 
 [**🚀 Try the Live App**](https://fosback-scorecard.streamlit.app)
 
-[<img width="995" height="531" alt="Raw_App_Screenshot" src="https://github.com/user-attachments/assets/33b80c7e-70fa-4cdc-afa4-fd853c6baa94" />](https://fosback-scorecard.streamlit.app)
-
+[<img width="1494" height="988" alt="image" src="https://github.com/user-attachments/assets/3425e9d1-8b23-469a-8947-01e48fc7d45c" />](https://fosback-scorecard.streamlit.app)
 
 ---
 
