@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 MIN_TRADING_DAYS = 200
+WARMUP_SESSIONS = 252  # a full 52-week window; every other indicator needs fewer rows
 DEFAULT_MARKET_PE = 20.0
 
 # Provisional thresholds; see BACKTEST.md for how they were checked against forward returns
@@ -106,6 +107,11 @@ def latest_metrics(df):
         'vol_5d': df['volume'].tail(5).mean(),
         'vol_50d': df['volume'].tail(50).mean(),
     }
+
+
+def metrics_history(df, first=WARMUP_SESSIONS):
+    """latest_metrics() as of each session from row `first` on. `df` must already have its indicators."""
+    return [latest_metrics(df.iloc[:i + 1]) for i in range(first, len(df))]
 
 
 def _as_positive_float(value):
@@ -278,3 +284,14 @@ def recommendation(score):
     if score >= -3:
         return "🔴 REDUCE / CONSIDER EXIT", "Unfavorable conditions. Risk-reward tilted down. Preserve capital."
     return "🔴 STRONG SELL", "Major headwinds across blocks. Wait for capitulation signals."
+
+
+def score_history(df, sessions=252, pe_ratio=None, market_pe=None):
+    """Normalized score as of each of the last `sessions` sessions that have a full warm-up behind them.
+
+    `df` must already have its indicators. Historical P/E is not available, so callers normally leave
+    `pe_ratio` out and valuation drops out of the score.
+    """
+    history = metrics_history(df, max(len(df) - sessions, WARMUP_SESSIONS))
+    return pd.Series([normalized_score(score_blocks(m, pe_ratio, market_pe)) for m in history],
+                     index=pd.DatetimeIndex([m['as_of'] for m in history], name='date'), name='score', dtype=float)

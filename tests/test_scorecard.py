@@ -11,6 +11,7 @@ from scorecard import (
     prepare_prices,
     recommendation,
     score_blocks,
+    score_history,
     sentiment_block,
     trend_momentum_block,
     valuation_block,
@@ -277,3 +278,18 @@ def test_win_rate_counts_up_days_in_last_20():
     last_20 = np.diff(close)[-20:]
     assert df['Win_Rate'].iloc[-1] == pytest.approx((last_20 > 0).sum() / 20 * 100)
     assert df['Win_Rate'].iloc[-1] == pytest.approx(35.0)
+
+
+def test_score_history_matches_scoring_each_day_from_scratch():
+    df = compute_indicators(make_prices(days=400))
+    history = score_history(df, sessions=100)
+    assert len(history) == 100
+    assert history.index[-1] == df['date'].iloc[-1]
+    for i in (-1, -50, -100):
+        sliced = compute_indicators(make_prices(days=400).iloc[:len(df) + i + 1])
+        assert history.iloc[i] == pytest.approx(normalized_score(score_blocks(latest_metrics(sliced))))
+
+
+def test_score_history_skips_sessions_without_full_warmup():
+    df = compute_indicators(make_prices(days=300))
+    assert len(score_history(df, sessions=252)) == 300 - 252

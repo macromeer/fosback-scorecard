@@ -48,3 +48,6 @@ Thumbs.db
 
 # Session planning notes
 PLAN.md
+
+# Backtest price cache
+data_cache/
