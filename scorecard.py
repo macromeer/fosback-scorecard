@@ -4,6 +4,7 @@ Nothing in here touches Streamlit or the network, so the scoring can be unit tes
 """
 import math
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -12,11 +13,13 @@ MIN_TRADING_DAYS = 200
 WARMUP_SESSIONS = 252  # a full 52-week window; every other indicator needs fewer rows
 DEFAULT_MARKET_PE = 20.0
 
-# Provisional thresholds; see BACKTEST.md for how they were checked against forward returns
+# Checked against forward returns in BACKTEST.md
 TREND_DEAD_BAND = 1.0  # % gap required between price, MA50 and MA200 before calling a trend direction
 MOMENTUM_LOOKBACK = 5  # sessions over which a change in the 20-day return counts as fading/accelerating
 WIN_RATE_HIGH = 65.0
 WIN_RATE_LOW = 35.0
+
+Metrics = dict[str, Any]  # as returned by latest_metrics()
 
 
 @dataclass
@@ -28,7 +31,7 @@ class Signal:
     max_down: int = 1
     available: bool = True  # False when the data behind the signal is missing; it then counts toward no maximum
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.tone:
             self.tone = 'success' if self.score > 0 else ('error' if self.score < 0 else 'info')
 
@@ -37,26 +40,26 @@ class Signal:
 class Block:
     key: str
     title: str
-    signals: list = field(default_factory=list)
+    signals: list[Signal] = field(default_factory=list)
 
     @property
-    def score(self):
+    def score(self) -> int:
         return sum(s.score for s in self.signals)
 
     @property
-    def max_up(self):
+    def max_up(self) -> int:
         return sum(s.max_up for s in self.signals if s.available)
 
     @property
-    def max_down(self):
+    def max_down(self) -> int:
         return sum(s.max_down for s in self.signals if s.available)
 
     @property
-    def available(self):
+    def available(self) -> bool:
         return any(s.available for s in self.signals)
 
 
-def prepare_prices(raw):
+def prepare_prices(raw: pd.DataFrame) -> pd.DataFrame:
     """Flatten a yf.download() frame into lower_snake_case columns sorted by date."""
     df = raw.reset_index()
     if isinstance(df.columns, pd.MultiIndex):
@@ -66,7 +69,7 @@ def prepare_prices(raw):
     return df.dropna(subset=['close']).sort_values('date').reset_index(drop=True)
 
 
-def compute_indicators(df):
+def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df['MA50'] = df['close'].rolling(window=50).mean()
     df['MA200'] = df['close'].rolling(window=200).mean()
@@ -85,7 +88,7 @@ def compute_indicators(df):
     return df.replace([np.inf, -np.inf], np.nan)
 
 
-def latest_metrics(df):
+def latest_metrics(df: pd.DataFrame) -> Metrics:
     last = df.iloc[-1]
     high_52w = df['high'].tail(252).max()
     low_52w = df['low'].tail(252).min()
@@ -109,12 +112,12 @@ def latest_metrics(df):
     }
 
 
-def metrics_history(df, first=WARMUP_SESSIONS):
+def metrics_history(df: pd.DataFrame, first: int = WARMUP_SESSIONS) -> list[Metrics]:
     """latest_metrics() as of each session from row `first` on. `df` must already have its indicators."""
     return [latest_metrics(df.iloc[:i + 1]) for i in range(first, len(df))]
 
 
-def _as_positive_float(value):
+def _as_positive_float(value: Any) -> float | None:
     """Return value as a finite positive float, or None (yfinance sometimes returns None or 'Infinity')."""
     try:
         value = float(value)
@@ -123,7 +126,7 @@ def _as_positive_float(value):
     return value if math.isfinite(value) and value > 0 else None
 
 
-def trend_momentum_block(m):
+def trend_momentum_block(m: Metrics) -> Block:
     block = Block('trend', 'Trend & Momentum')
 
     up, down = 1 + TREND_DEAD_BAND / 100, 1 - TREND_DEAD_BAND / 100
@@ -157,7 +160,7 @@ def trend_momentum_block(m):
     return block
 
 
-def breadth_block(m):
+def breadth_block(m: Metrics) -> Block:
     block = Block('breadth', 'Breadth & Quality')
     vol_trend = m['vol_trend']
     if pd.isna(vol_trend):
@@ -171,7 +174,7 @@ def breadth_block(m):
     return block
 
 
-def sentiment_block(m):
+def sentiment_block(m: Metrics) -> Block:
     block = Block('sentiment', 'Sentiment & Flows')
 
     roc_50 = m['roc_50']
@@ -192,7 +195,7 @@ def sentiment_block(m):
     return block
 
 
-def valuation_block(pe_ratio, market_pe):
+def valuation_block(pe_ratio: Any, market_pe: Any) -> Block:
     block = Block('valuation', 'Valuation & Macro')
     pe_ratio = _as_positive_float(pe_ratio)
     market_pe = _as_positive_float(market_pe) or DEFAULT_MARKET_PE
@@ -213,7 +216,7 @@ def valuation_block(pe_ratio, market_pe):
     return block
 
 
-def volatility_block(m):
+def volatility_block(m: Metrics) -> Block:
     block = Block('volatility', 'Volatility Regime')
     z = m['vol_z_score']
     # Calm volatility is the normal state, not a reason to buy, so this signal can only subtract
@@ -231,7 +234,7 @@ def volatility_block(m):
     return block
 
 
-def liquidity_block(m):
+def liquidity_block(m: Metrics) -> Block:
     block = Block('liquidity', 'Liquidity Conditions')
     vol_5d, vol_50d = m['vol_5d'], m['vol_50d']
     # The 20-day volume trend is already scored in the breadth block, so liquidity looks at the last week instead
@@ -250,7 +253,7 @@ def liquidity_block(m):
     return block
 
 
-def score_blocks(m, pe_ratio=None, market_pe=None):
+def score_blocks(m: Metrics, pe_ratio: Any = None, market_pe: Any = None) -> list[Block]:
     return [
         trend_momentum_block(m),
         breadth_block(m),
@@ -261,7 +264,7 @@ def score_blocks(m, pe_ratio=None, market_pe=None):
     ]
 
 
-def normalized_score(blocks):
+def normalized_score(blocks: list[Block]) -> float:
     """Scale the raw total onto -5..+5.
 
     Some signals can only subtract, so the best and worst possible totals differ in size. Positive totals are
@@ -273,7 +276,7 @@ def normalized_score(blocks):
     return total / limit * 5 if limit else 0.0
 
 
-def recommendation(score):
+def recommendation(score: float) -> tuple[str, str]:
     if score >= 3:
         return "🟢 STRONG BUY", "Favorable across most indicators. Technicals + flows suggest upside."
     if score >= 1:
@@ -285,7 +288,7 @@ def recommendation(score):
     return "🔴 STRONG SELL", "Major headwinds across blocks. Wait for capitulation signals."
 
 
-def score_history(df, sessions=252, pe_ratio=None, market_pe=None):
+def score_history(df: pd.DataFrame, sessions: int = 252, pe_ratio: Any = None, market_pe: Any = None) -> pd.Series:
     """Normalized score as of each of the last `sessions` sessions that have a full warm-up behind them.
 
     `df` must already have its indicators. Historical P/E is not available, so callers normally leave
