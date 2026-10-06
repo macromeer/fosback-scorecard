@@ -1,11 +1,13 @@
 import logging
 from datetime import datetime, timedelta
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 import yfinance as yf
 
 from scorecard import (
+    DEFAULT_MARKET_PE,
     MIN_TRADING_DAYS,
     compute_indicators,
     latest_metrics,
@@ -13,9 +15,15 @@ from scorecard import (
     prepare_prices,
     recommendation,
     score_blocks,
+    score_history,
 )
 
 logger = logging.getLogger(__name__)
+
+# Every indicator uses a fixed window (at most 252 sessions), so a fixed download is enough; three years
+# also leaves a full year of history behind each point of the score history chart
+HISTORY_DAYS = 3 * 365
+MAX_COMPARE = 10
 
 # Page config
 st.set_page_config(
@@ -36,7 +44,7 @@ investors look at, then gives you a simple score from **-5 (Sell)** to **+5 (Buy
 - ✅ Works for any stock or ETF listed on Yahoo Finance
 - ✅ Uses the latest daily market data
 - ✅ No complex jargon - clear explanations for each factor
-- ✅ Based on Norman Fosback's proven framework from 1976, updated for today's algo-driven markets
+- ✅ Based on Norman Fosback's framework from 1976, updated for today's algo-driven markets
 
 **Perfect for:** Long-term investors, DIY portfolio managers, or anyone curious about market timing without the complexity.
 """)
@@ -47,7 +55,7 @@ with st.expander("📖 How It Works (Click to Learn More)"):
 
     1. **Trend & Momentum** - Is the price moving up or down? Is it accelerating?
     2. **Breadth & Quality** - Are investors showing real interest (volume)?
-    3. **Sentiment & Flows** - Is it overbought (risky) or oversold (opportunity)?
+    3. **Sentiment & Flows** - Has it gained or lost a lot over the last 50 days?
     4. **Valuation & Macro** - Is it expensive or cheap compared to the market?
     5. **Volatility Regime** - Is the market calm or stressed?
     6. **Liquidity** - Can you easily buy/sell without moving the price?
@@ -70,9 +78,11 @@ BLOCK_EXPLAINERS = {
     'trend': """
     **In simple terms:** Is the stock going up or down, and how fast?
 
-    - **Trend**: We compare current price to its 50-day and 200-day averages
-    - **Momentum**: How much has it moved in the last 20 days?
-    - **Consistency**: Does it have more "up days" than "down days"?
+    - **Trend**: Is the price more than 1% above its 50-day average, and that average more than 1% above
+      the 200-day average (or both clearly below)? Anything closer counts as mixed.
+    - **Momentum**: How much has it moved in the last 20 days, and has that pace picked up or slipped
+      over the last week?
+    - **Consistency**: Were more than 65% (or fewer than 35%) of the last 20 sessions up days?
 
     **Why it matters:** You want to buy stocks moving up with strong momentum, not falling knives.
     """,
@@ -85,13 +95,14 @@ BLOCK_EXPLAINERS = {
     Think of it like a product going viral vs. one nobody talks about.
     """,
     'sentiment': """
-    **In simple terms:** Is this a good deal, or has it already run too far?
+    **In simple terms:** How has it been doing lately, and where does it sit in its yearly range?
 
-    - **Recent Performance**: How has it done over the last 50 days?
-    - **52-Week Position**: Is it near its high (expensive) or low (cheap)?
+    - **Recent Performance**: Up or down more than 10% over the last 50 days? This is what gets scored.
+    - **52-Week Position**: Where the price sits between its 52-week low and high. Shown for context only.
 
-    **Why it matters:** Buying near 52-week highs can be risky (might correct).
-    Buying near lows can be an opportunity (if fundamentals are intact).
+    **Why the position is not scored:** A stock near its 52-week high can look "too expensive", but in our
+    10-year backtest stocks near their high went on to do slightly better than average, not worse.
+    Counting it against the stock also cancelled out the uptrend signal for almost every rising stock.
     """,
     'valuation': """
     **In simple terms:** Is this expensive or cheap compared to the overall market (S&P 500)?
@@ -100,6 +111,9 @@ BLOCK_EXPLAINERS = {
 
     **Why it matters:** A stock trading at a big premium needs exceptional growth to justify it.
     A discount might indicate an opportunity (or a problem - needs more research!).
+
+    Most ETFs and companies without earnings have no P/E. This block is then left out of the score
+    instead of being counted as neutral.
     """,
     'volatility': """
     **In simple terms:** How wild are the price swings? Is the market calm or panicking?
@@ -109,18 +123,38 @@ BLOCK_EXPLAINERS = {
     **Why it matters:**
     - High volatility = stress/panic = risky but potential opportunities
     - Too low = complacency = danger (calm before the storm)
-    - Normal = healthy market conditions
+    - Normal = no extra risk, but also no reason to buy
+
+    This block can only lower the score: normal volatility counts as neutral, high stress counts against.
     """,
     'liquidity': """
     **In simple terms:** How easy is it to buy or sell without affecting the price?
 
-    - **Volume Trends**: Is trading activity stable or drying up?
-    - **Price Stability**: Are prices jumping around erratically?
+    - **Recent Volume**: Has trading in the last 5 days dropped below half its 50-day average?
+    - **Price Stability**: Are prices jumping around erratically (wide daily ranges, mostly down days)?
 
     **Why it matters:** Low liquidity means you might struggle to sell when you want,
     or face big price swings. Good liquidity = smoother trading experience.
+
+    This block can only lower the score: normal liquidity counts as neutral, liquidity stress counts against.
     """,
 }
+
+def signed(n):
+    return f"{n:+d}" if n else "0"
+
+
+def score_range(block):
+    if not block.available:
+        return "not scored (no data)"
+    return f"{signed(-block.max_down)} to {signed(block.max_up)}"
+
+
+def block_status(block):
+    if not block.available:
+        return '– NOT SCORED'
+    return '✓ FAVORABLE' if block.score > 0 else ('✗ UNFAVORABLE' if block.score < 0 else '~ NEUTRAL')
+
 
 TONE_RENDERERS = {
     'success': st.success,
@@ -131,8 +165,8 @@ TONE_RENDERERS = {
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_prices(ticker, days_back):
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+def load_prices(ticker):
+    start_date = (datetime.now() - timedelta(days=HISTORY_DAYS)).strftime('%Y-%m-%d')
     # yfinance treats `end` as exclusive, so today's incomplete session is left out
     end_date = datetime.now().strftime('%Y-%m-%d')
     raw = yf.download(ticker, start=start_date, end=end_date, progress=False)
@@ -145,27 +179,50 @@ def load_prices(ticker, days_back):
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def load_trailing_pe(ticker):
-    return yf.Ticker(ticker).info.get('trailingPE')
+def load_quote_info(ticker):
+    info = yf.Ticker(ticker).info
+    return {'trailing_pe': info.get('trailingPE'), 'currency': info.get('currency')}
 
 
-def safe_trailing_pe(ticker):
+def safe_quote_info(ticker):
     try:
-        return load_trailing_pe(ticker)
+        return {**load_quote_info(ticker), 'failed': False}
     except Exception:
-        logger.warning("Could not load P/E for %s", ticker, exc_info=True)
-        return None
+        logger.warning("Could not load quote info for %s", ticker, exc_info=True)
+        return {'trailing_pe': None, 'currency': None, 'failed': True}
 
 
-def run_analysis(ticker, days_back):
-    df = prepare_prices(load_prices(ticker, days_back))
+def format_price(value, currency):
+    return f"{currency} {value:,.2f}" if currency else f"{value:,.2f}"
+
+
+def score_history_chart(history):
+    data = history.reset_index()
+    line = alt.Chart(data).mark_line().encode(
+        x=alt.X('date:T', title=None),
+        y=alt.Y('score:Q', title='Score', scale=alt.Scale(domain=[-5, 5])),
+        tooltip=[alt.Tooltip('date:T'), alt.Tooltip('score:Q', format='+.2f')],
+    )
+    # The recommendation cut-offs
+    rules = alt.Chart(pd.DataFrame({'y': [-3, -1, 1, 3]})).mark_rule(strokeDash=[4, 4], opacity=0.4).encode(y='y:Q')
+    return line + rules
+
+
+def analyze(ticker):
+    """Indicators, latest metrics, quote info and scored blocks for one ticker."""
+    df = prepare_prices(load_prices(ticker))
     if len(df) < MIN_TRADING_DAYS:
-        st.error(f"Insufficient data for {ticker}. Need at least {MIN_TRADING_DAYS} trading days.")
-        return
-
+        raise LookupError(f"Insufficient data for {ticker}. Need at least {MIN_TRADING_DAYS} trading days.")
     df = compute_indicators(df)
     m = latest_metrics(df)
-    blocks = score_blocks(m, safe_trailing_pe(ticker), safe_trailing_pe('SPY'))
+    info = safe_quote_info(ticker)
+    market_info = safe_quote_info('SPY')
+    return df, m, info, market_info, score_blocks(m, info['trailing_pe'], market_info['trailing_pe'])
+
+
+def run_analysis(ticker):
+    df, m, info, market_info, blocks = analyze(ticker)
+    currency = info['currency']
 
     # Display current metrics
     st.header(f"{ticker} - Current Metrics")
@@ -173,10 +230,10 @@ def run_analysis(ticker, days_back):
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Price", f"${m['price']:.2f}")
-        st.metric("MA50", f"${m['ma50']:.2f}", f"{((m['price'] - m['ma50']) / m['ma50'] * 100):+.2f}%")
+        st.metric("Price", format_price(m['price'], currency))
+        st.metric("MA50", format_price(m['ma50'], currency), f"{((m['price'] - m['ma50']) / m['ma50'] * 100):+.2f}%")
     with col2:
-        st.metric("MA200", f"${m['ma200']:.2f}", f"{((m['price'] - m['ma200']) / m['ma200'] * 100):+.2f}%")
+        st.metric("MA200", format_price(m['ma200'], currency), f"{((m['price'] - m['ma200']) / m['ma200'] * 100):+.2f}%")
         st.metric("20d ROC", f"{m['roc_20']:+.2f}%")
     with col3:
         st.metric("Volatility (20d)", f"{m['volatility']:.2f}%")
@@ -191,15 +248,23 @@ def run_analysis(ticker, days_back):
             st.markdown(BLOCK_EXPLAINERS[block.key])
         for signal in block.signals:
             TONE_RENDERERS[signal.tone](signal.message)
-        st.metric(f"Block {number} Score", f"{block.score}/{block.max_score}")
+        if block.key == 'valuation':
+            if info['failed']:
+                st.caption(f"⚠️ Yahoo Finance did not answer the P/E request for {ticker}, so valuation was left out. "
+                           "This is usually temporary; try again in a few minutes.")
+            elif market_info['failed']:
+                st.caption("⚠️ Yahoo Finance did not answer the S&P 500 (SPY) P/E request, so a market P/E of "
+                           f"{DEFAULT_MARKET_PE:g} was assumed. This is usually temporary.")
+        st.metric(f"Block {number} Score", signed(block.score), help=f"Possible range: {score_range(block)}")
 
     # FINAL SCORECARD
     st.header("📊 Final Scorecard")
 
     scorecard_df = pd.DataFrame({
         'Category': [b.title for b in blocks],
-        'Score': [f"{b.score}/{b.max_score}" for b in blocks],
-        'Status': [('✓ FAVORABLE' if b.score > 0 else ('✗ UNFAVORABLE' if b.score < 0 else '~ NEUTRAL')) for b in blocks]
+        'Score': [signed(b.score) for b in blocks],
+        'Range': [score_range(b) for b in blocks],
+        'Status': [block_status(b) for b in blocks]
     })
 
     st.dataframe(scorecard_df, width="stretch", hide_index=True)
@@ -220,6 +285,19 @@ def run_analysis(ticker, days_back):
 
     st.info(meaning)
 
+    metrics_df = pd.DataFrame(
+        list({**m, 'currency': currency, 'trailing_pe': info['trailing_pe'],
+              'normalized_score': score, 'recommendation': label}.items()),
+        columns=['Metric', 'Value'],
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button("⬇️ Download scorecard (CSV)", scorecard_df.to_csv(index=False),
+                           file_name=f"{ticker}_Scorecard.csv", mime="text/csv")
+    with col2:
+        st.download_button("⬇️ Download metrics (CSV)", metrics_df.to_csv(index=False),
+                           file_name=f"{ticker}_Metrics.csv", mime="text/csv")
+
     st.markdown("---")
     st.caption("""
     **💡 How to use this score:**
@@ -236,7 +314,53 @@ def run_analysis(ticker, days_back):
     chart_data = df[['date', 'close', 'MA50', 'MA200']].tail(252).set_index('date')
     st.line_chart(chart_data)
 
+    st.subheader("Score History")
+    history = score_history(df)
+    if history.empty:
+        st.caption("Not enough price history yet to show how the score has changed.")
+    else:
+        st.altair_chart(score_history_chart(history), width="stretch")
+        st.caption("The score as it would have read at each close over the last year. Dashed lines mark the "
+                   "recommendation cut-offs (±1, ±3). Valuation is left out because past P/E ratios are not "
+                   "available, so the latest point can differ from the score above.")
+
     # Disclaimer
+    st.caption("**Disclaimer:** For educational purposes only. Not financial advice. Always consult a qualified advisor.")
+
+
+def parse_tickers(text):
+    """Unique, upper-cased tickers from a comma-separated list, in the order given."""
+    return list(dict.fromkeys(t.strip().upper() for t in text.split(',') if t.strip()))
+
+
+def run_comparison(tickers):
+    st.header("📋 Comparison")
+    rows, failures = [], []
+    for ticker in tickers:
+        try:
+            _, m, info, _, blocks = analyze(ticker)
+        except LookupError as e:
+            failures.append(str(e))
+            continue
+        except Exception as e:
+            logger.exception("Comparison failed for %s", ticker)
+            failures.append(f"Something went wrong analyzing {ticker}: {e}")
+            continue
+        score = normalized_score(blocks)
+        rows.append({
+            'Ticker': ticker,
+            'Price': format_price(m['price'], info['currency']),
+            'Score': score,
+            'Recommendation': recommendation(score)[0],
+            **{b.title: signed(b.score) if b.available else '–' for b in blocks},
+        })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
+                     column_config={'Score': st.column_config.NumberColumn(format="%+.2f")})
+        st.caption("Block columns show each block's score; – means no data (for example, no P/E for an ETF). "
+                   "Click a column header to sort. Run a single ticker for the full breakdown.")
+    for failure in failures:
+        st.warning(failure)
     st.caption("**Disclaimer:** For educational purposes only. Not financial advice. Always consult a qualified advisor.")
 
 
@@ -248,21 +372,35 @@ ticker = st.sidebar.text_input(
     help="Use the Yahoo Finance symbol. Non-US listings need an exchange suffix, "
          "e.g. NESN.SW (Zurich), SAP.DE (Xetra), VOD.L (London). Search finance.yahoo.com if unsure.",
 ).strip().upper()
-days_back = st.sidebar.slider("Days of Historical Data", 365, 1095, 730)
 
 if st.sidebar.button("Run Analysis", type="primary") and ticker:
     # Remember the request so the results survive reruns triggered by other widgets
-    st.session_state['analysis_request'] = (ticker, days_back)
+    st.session_state['request'] = ('single', ticker)
 
-request = st.session_state.get('analysis_request')
-if request:
-    with st.spinner(f"Analyzing {request[0]}..."):
+st.sidebar.markdown("---")
+compare_input = st.sidebar.text_input(
+    "Compare Tickers",
+    value="AAPL, MSFT, NESN.SW",
+    help=f"Comma-separated Yahoo Finance symbols, up to {MAX_COMPARE}.",
+)
+compare_tickers = parse_tickers(compare_input)
+if len(compare_tickers) > MAX_COMPARE:
+    st.sidebar.caption(f"Only the first {MAX_COMPARE} tickers will be compared.")
+if st.sidebar.button("Compare") and compare_tickers:
+    st.session_state['request'] = ('compare', tuple(compare_tickers[:MAX_COMPARE]))
+
+mode, request = st.session_state.get('request', (None, None))
+if mode == 'compare':
+    with st.spinner(f"Comparing {len(request)} tickers..."):
+        run_comparison(request)
+elif mode == 'single':
+    with st.spinner(f"Analyzing {request}..."):
         try:
-            run_analysis(*request)
+            run_analysis(request)
         except LookupError as e:
             st.error(str(e))
         except Exception as e:
-            logger.exception("Analysis failed for %s", request[0])
-            st.error(f"Something went wrong analyzing {request[0]}: {e}. Please try again in a minute.")
+            logger.exception("Analysis failed for %s", request)
+            st.error(f"Something went wrong analyzing {request}: {e}. Please try again in a minute.")
 else:
-    st.info("👈 Enter a ticker symbol and click 'Run Analysis' to begin")
+    st.info("👈 Enter a ticker symbol and click 'Run Analysis' to begin, or compare several tickers at once")

@@ -18,7 +18,7 @@ This tool analyzes **any stock or ETF** and gives you a clear score from **-5 (S
 
 - 📈 **Trend & Momentum** - Is it going up or down?
 - 📊 **Trading Volume** - Are people actually buying it?
-- 🎯 **Price Position** - Is it cheap or expensive right now?
+- 🎯 **Recent Performance** - Has it gained or lost a lot over the last 50 days?
 - 💰 **Valuation** - Compared to the overall market
 - 📉 **Volatility** - Is it stable or all over the place?
 - 💧 **Liquidity** - Can you easily trade it?
@@ -36,6 +36,9 @@ This tool analyzes **any stock or ETF** and gives you a clear score from **-5 (S
 3. **Click "Run Analysis"**
 4. **Get your score** and recommendation
 
+Want to line up several at once? Type up to 10 tickers, separated by commas, under **Compare Tickers** and
+click **Compare** for a one-table overview.
+
 That's it! The whole analysis takes ~5 seconds.
 
 ---
@@ -50,6 +53,11 @@ That's it! The whole analysis takes ~5 seconds.
 | **-3 to -1** | 🔴 Reduce/Exit | Warning signs - consider selling |
 | **-5 to -3** | 🔴 Strong Sell | Multiple red flags - stay away |
 
+A stock where nothing stands out scores 0. Volatility and liquidity can only pull the score down:
+calm, easy-to-trade conditions are normal and are not a reason to buy.
+When data is missing (for example, most ETFs have no P/E ratio), that factor is left out of the score
+rather than counted as neutral, so the full -5 to +5 range is still possible.
+
 ---
 
 ## Example: Analyzing Apple (AAPL)
@@ -60,12 +68,21 @@ Recommendation: 🟢 BUY/HOLD
 
 ✓ Uptrend confirmed
 ✓ Strong momentum (+8.2% in 20 days)
-✓ High consistency (65% positive days)
+✓ High consistency (70% positive days)
 ~ Volume stable
-✗ Overbought (at 82% of 52-week range)
+~ Near 52-week high (82% of range, shown for context)
 ```
 
 Each factor is explained so you understand *why* the score is what it is.
+
+---
+
+## Does It Work?
+
+We checked. In a 10-year backtest across 35 stocks and ETFs, the score showed almost no relationship with
+how a stock did over the following three months. Days scoring +3 or higher beat the S&P 500 by about 1%
+on average over the next 60 trading days, but half of them still trailed it. Treat the score as a quick
+summary of the chart, not a prediction. The details are in [BACKTEST.md](BACKTEST.md).
 
 ---
 
