@@ -210,12 +210,20 @@ def volatility_block(m):
 
 def liquidity_block(m):
     block = Block('liquidity', 'Liquidity Conditions')
-    vol_trend = m['vol_trend']
+    vol_5d, vol_50d = m['vol_5d'], m['vol_50d']
+    # The 20-day volume trend is already scored in the breadth block, so liquidity looks at the last week instead
+    volume_known = pd.notna(vol_5d) and pd.notna(vol_50d) and vol_50d > 0
     # Being easy to trade is the normal state, not a reason to buy, so this signal can only subtract
-    if vol_trend < -10 or (m['daily_range'] > 2.5 and m['win_rate'] < 40):
-        block.signals.append(Signal(-1, "✗ **Liquidity Stress** - Low volume or erratic prices (be cautious)", max_up=0))
+    if volume_known and vol_5d < vol_50d * 0.5:
+        block.signals.append(Signal(-1, f"✗ **Liquidity Stress** - Volume over the last 5 days is {vol_5d / vol_50d * 100:.0f}% "
+                                        "of its 50-day average (thin trading)", max_up=0))
+    elif m['daily_range'] > 2.5 and m['win_rate'] < 40:
+        block.signals.append(Signal(-1, f"✗ **Liquidity Stress** - Erratic prices: {m['daily_range']:.1f}% daily range "
+                                        "with mostly down days (be cautious)", max_up=0))
+    elif volume_known:
+        block.signals.append(Signal(0, "~ **Normal Liquidity** - Recent volume in line with its 50-day average", max_up=0))
     else:
-        block.signals.append(Signal(0, "~ **Normal Liquidity** - Standard trading conditions", max_up=0))
+        block.signals.append(Signal(0, "~ **Normal Liquidity** - Prices orderly (no reliable volume data)", max_up=0))
     return block
 
 

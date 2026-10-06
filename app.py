@@ -116,8 +116,8 @@ BLOCK_EXPLAINERS = {
     'liquidity': """
     **In simple terms:** How easy is it to buy or sell without affecting the price?
 
-    - **Volume Trends**: Is trading activity stable or drying up?
-    - **Price Stability**: Are prices jumping around erratically?
+    - **Recent Volume**: Has trading in the last 5 days dropped below half its 50-day average?
+    - **Price Stability**: Are prices jumping around erratically (wide daily ranges, mostly down days)?
 
     **Why it matters:** Low liquidity means you might struggle to sell when you want,
     or face big price swings. Good liquidity = smoother trading experience.

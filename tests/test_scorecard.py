@@ -3,8 +3,10 @@ import pandas as pd
 import pytest
 
 from scorecard import (
+    breadth_block,
     compute_indicators,
     latest_metrics,
+    liquidity_block,
     normalized_score,
     prepare_prices,
     recommendation,
@@ -80,6 +82,16 @@ def test_score_scale_is_asymmetric_but_reaches_both_ends():
     down = score_blocks({**NEUTRAL_CASE, 'roc_50': -15.0}, pe_ratio=20, market_pe=20)
     assert normalized_score(up) == pytest.approx(5 / 7)
     assert normalized_score(down) == pytest.approx(-5 / 9)
+
+
+def test_volume_trend_only_counts_once():
+    m = {**BEST_CASE, 'vol_trend': -20.0}
+    assert breadth_block(m).score == -1
+    assert liquidity_block(m).score == 0
+
+
+def test_collapsing_recent_volume_is_liquidity_stress():
+    assert liquidity_block({**NEUTRAL_CASE, 'vol_5d': 400_000, 'vol_50d': 1_000_000}).score == -1
 
 
 def test_fading_momentum_on_rising_stock_does_not_say_down():
