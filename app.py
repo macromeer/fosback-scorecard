@@ -41,7 +41,7 @@ investors look at, then gives you a simple score from **-5 (Sell)** to **+5 (Buy
 - ✅ Works for any stock or ETF listed on Yahoo Finance
 - ✅ Uses the latest daily market data
 - ✅ No complex jargon - clear explanations for each factor
-- ✅ Based on Norman Fosback's proven framework from 1976, updated for today's algo-driven markets
+- ✅ Based on Norman Fosback's framework from 1976, updated for today's algo-driven markets
 
 **Perfect for:** Long-term investors, DIY portfolio managers, or anyone curious about market timing without the complexity.
 """)

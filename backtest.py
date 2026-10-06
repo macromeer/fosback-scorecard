@@ -311,7 +311,7 @@ def metric_bucket_table(panel, column):
     return "\n\n".join(out)
 
 
-def report(panel, variants):
+def report(panel, variants, all_details=False):
     tickers = panel['ticker'].unique()
     parts = [
         f"# Backtest results\n\nGenerated {datetime.now():%Y-%m-%d} by `backtest.py`.\n",
@@ -334,7 +334,7 @@ def report(panel, variants):
                  "rally or crash does not dominate; \"years > 0\" counts calendar years where that average was "
                  "positive.\n\n"
                  + markdown_table(summary, list(summary[0])))
-    for name, scores in all_scores.items():
+    for name, scores in list(all_scores.items())[:None if all_details else 1]:
         variant = VARIANTS[name]
         parts.append(f"\n## Variant `{name}`\n\n{variant.description}.\n")
         for h in HORIZONS:
@@ -353,6 +353,8 @@ def main():
     parser.add_argument('--years', type=float, default=10)
     parser.add_argument('--variant', action='append', choices=list(VARIANTS),
                         help="repeat to compare several; default: all")
+    parser.add_argument('--all-details', action='store_true',
+                        help="detailed tables for every variant, not only the first")
     parser.add_argument('--output', help="write the markdown report here instead of stdout")
     args = parser.parse_args()
 
@@ -362,7 +364,7 @@ def main():
     tickers = [t.upper() for t in args.tickers if t.upper() != BENCHMARK]
     print(f"Loading {len(tickers)} tickers...")
     panel = build_panel(tickers, start, end)
-    text = report(panel, args.variant or list(VARIANTS))
+    text = report(panel, args.variant or list(VARIANTS), args.all_details)
     if args.output:
         Path(args.output).write_text(text)
         print(f"Wrote {args.output}")

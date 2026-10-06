@@ -74,6 +74,15 @@ Each factor is explained so you understand *why* the score is what it is.
 
 ---
 
+## Does It Work?
+
+We checked. In a 10-year backtest across 35 stocks and ETFs, the score showed almost no relationship with
+how a stock did over the following three months. Days scoring +3 or higher beat the S&P 500 by about 1%
+on average over the next 60 trading days, but half of them still trailed it. Treat the score as a quick
+summary of the chart, not a prediction. The details are in [BACKTEST.md](BACKTEST.md).
+
+---
+
 ## Why This Tool?
 
 **Traditional approach**: Read 20 articles, check 10 charts, still confused.
